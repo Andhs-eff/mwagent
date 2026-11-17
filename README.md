@@ -380,10 +380,10 @@ The app never updates itself. **About → Check for updates** asks GitHub only w
 <summary><b>🔏 Verify the APK</b></summary>
 <br>
 
-Run `apksigner verify --print-certs mw-agent-<version>.apk` and compare the SHA-256 digest of the signer certificate:
+Run `apksigner verify --print-certs mw-agent-plus-<version>.apk` and compare the SHA-256 digest of the signer certificate:
 
 ```
-7ddf784ffa7ed58dc259fd7a2b9065d7e67a5f93db21bfe6015351d5459e8bea
+fdc3fc65ecd9a809c195797bbc311489ab1a58f0ca1a7701df0d73d2dc5512d9
 ```
 
 </details>
