@@ -11,14 +11,14 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/mwdevpy/mwagent/releases/latest">
+  <a href="https://github.com/Andhs-eff/mwagent/releases/latest">
     <img alt="Download the APK" src="https://img.shields.io/badge/Download_APK-FF3D7F?style=for-the-badge&logo=android&logoColor=white" height="42">
   </a>
 </p>
 
 <p align="center">
-  <a href="https://github.com/mwdevpy/mwagent/releases/latest"><img alt="Version 0.13.0" src="https://img.shields.io/badge/version-0.13.0-FF7A45?style=flat-square"></a>
-  <a href="https://github.com/mwdevpy/mwagent/releases"><img alt="Releases" src="https://img.shields.io/badge/releases-GitHub-FF3D7F?style=flat-square&logo=github&logoColor=white"></a>
+  <a href="https://github.com/Andhs-eff/mwagent/releases/latest"><img alt="Version 0.14.0" src="https://img.shields.io/badge/version-0.14.0-FF7A45?style=flat-square"></a>
+  <a href="https://github.com/Andhs-eff/mwagent/releases"><img alt="Releases" src="https://img.shields.io/badge/releases-GitHub-FF3D7F?style=flat-square&logo=github&logoColor=white"></a>
   <a href="LICENSE"><img alt="License: GPL v3" src="https://img.shields.io/badge/license-GPLv3-9B4DFF?style=flat-square"></a>
   <img alt="Android 10 and up" src="https://img.shields.io/badge/Android-10%2B-3DDC84?style=flat-square&logo=android&logoColor=white">
   <img alt="Python on device" src="https://img.shields.io/badge/Python_3.13-on_device-3776AB?style=flat-square&logo=python&logoColor=white">
@@ -368,7 +368,7 @@ Tools from MCP servers always start as Ask.
 
 | Step | |
 |:-:|---|
-| **1** | Download `mw-agent-<version>.apk` from the [latest release](https://github.com/mwdevpy/mwagent/releases/latest). Android 10+, 64-bit ARM. |
+| **1** | Download `mw-agent-plus-<version>.apk` from the [latest release](https://github.com/Andhs-eff/mwagent/releases/latest). Android 10+, 64-bit ARM. |
 | **2** | Open the file and allow installs from that app when Android asks. |
 | **3** | **Settings → Models**: add a provider, pick the API format, paste the base URL and your key. |
 | **4** | Pick a model at the top of a new chat and say hi. |
@@ -457,7 +457,7 @@ The video may be private, age-restricted, region-locked or larger than the limit
 - 🔒 Без сервера, аккаунта и аналитики. Ключи и сессия Telegram зашифрованы, опасные действия спрашивают разрешение.
 
 <p align="center">
-  <a href="https://github.com/mwdevpy/mwagent/releases/latest">
+  <a href="https://github.com/Andhs-eff/mwagent/releases/latest">
     <img alt="Скачать APK" src="https://img.shields.io/badge/Скачать_APK-FF3D7F?style=for-the-badge&logo=android&logoColor=white" height="38">
   </a>
 </p>
@@ -466,4 +466,4 @@ The video may be private, age-restricted, region-locked or larger than the limit
 
 GNU General Public License v3.0, see [LICENSE](LICENSE).
 
-MW AGENT is a fork of [MD3 Agent](https://github.com/huecoder/MD3-Agent) by huecoder, modified and distributed under the same GPL v3 terms. The original project is not affiliated with this fork and is not responsible for it. Third-party libraries and assets are listed in [THIRD_PARTY.md](THIRD_PARTY.md).
+MW Agent+ is a fork of [MW AGENT](https://github.com/mwdevpy/mwagent) by mwdevpy and [MD3 Agent](https://github.com/huecoder/MD3-Agent) by huecoder, merging upstream features from both projects and distributed under the same GPL v3 terms. The original projects are not affiliated with this fork and are not responsible for it. Third-party libraries and assets are listed in [THIRD_PARTY.md](THIRD_PARTY.md).

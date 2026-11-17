@@ -31,5 +31,8 @@ jobs:
           java-version: '17'
           cache: gradle
 
+      - name: Run Python unit tests
+        run: python3 -I -m unittest discover -s app/src/test/python
+
       - name: Test and build
         run: ./gradlew --no-daemon testDebugUnitTest assembleDebug
