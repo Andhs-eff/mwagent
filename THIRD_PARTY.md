@@ -11,7 +11,7 @@ Vendor glyphs in `app/src/main/res/drawable/ic_vendor_*.xml` are monochrome trac
 
 # Cursors
 
-- [Bibata Cursor](https://github.com/ful1e5/Bibata_Cursor) (GPL-3.0, Copyright (c) ful1e5): the Modern and Original arrow outlines (`left_ptr`) and their hotspot, drawn by the phone use overlay in `app/src/main/java/dev/huecoder/md3agent/feature/phoneuse/CursorShapes.kt`
+- [Bibata Cursor](https://github.com/ful1e5/Bibata_Cursor) (GPL-3.0, Copyright (c) ful1e5): the Modern and Original arrow outlines (`left_ptr`) and their hotspot, drawn by the phone use overlay in `app/src/main/java/com/mwagent/feature/phoneuse/CursorShapes.kt`
 
 # Sounds
 

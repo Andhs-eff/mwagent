@@ -1,8 +1,20 @@
 package com.mwagent.system.control
 
+import kotlin.math.abs
 import kotlin.math.roundToInt
 
-data class SwipePlan(val from: ScreenPoint, val to: ScreenPoint, val durationMs: Long)
+data class SwipePlan(val from: ScreenPoint, val to: ScreenPoint, val durationMs: Long) {
+    val finger: SwipeDirection
+        get() {
+            val dx = to.x - from.x
+            val dy = to.y - from.y
+            return when {
+                abs(dy) >= abs(dx) -> if (dy < 0) SwipeDirection.UP else SwipeDirection.DOWN
+                dx < 0 -> SwipeDirection.LEFT
+                else -> SwipeDirection.RIGHT
+            }
+        }
+}
 
 object SwipePlanner {
     const val DEFAULT_REACH = 0.6f

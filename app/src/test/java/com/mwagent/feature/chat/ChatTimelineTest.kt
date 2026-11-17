@@ -2,6 +2,7 @@ package com.mwagent.feature.chat
 
 import com.mwagent.conversation.StreamingDraft
 import com.mwagent.conversation.TurnAssembler
+import com.mwagent.data.chat.MessageVersions
 import com.mwagent.data.db.MessageEntity
 import com.mwagent.data.db.MessageRole
 import com.mwagent.data.db.MessageStatus
@@ -66,6 +67,17 @@ class ChatTimelineTest {
     }
 
     @Test
+    fun `an edited message carries its version position into the timeline`() {
+        val messages = listOf(row(MessageRole.USER, "вопрос"), row(MessageRole.ASSISTANT, "ответ"))
+        val versions = mapOf(messages[0].id to MessageVersions(position = 2, count = 3, previousId = "old", nextId = "newer"))
+
+        val timeline = ChatTimeline.build(messages, draft = null, versions = versions)
+
+        assertEquals(MessageVersions(2, 3, "old", "newer"), (timeline[0] as ChatItem.User).versions)
+        assertNull((timeline[1] as? ChatItem.User)?.versions)
+    }
+
+    @Test
     fun `tool rounds without text in between fold into one group`() {
         val read = ToolCall("r1", "read_webpage", """{"url":"https://a.b"}""")
         val messages = listOf(
@@ -81,6 +93,24 @@ class ChatTimelineTest {
 
         assertEquals(listOf("s1", "r1"), (reply.parts[0] as ReplyPart.Work).calls.map { it.id })
         assertEquals(ReplyPart.Text("Готово", isStreaming = false), reply.parts[1])
+    }
+
+    @Test
+    fun `whitespace the model sends next to tool calls does not split the work group`() {
+        val read = ToolCall("r1", "read_webpage", """{"url":"https://a.b"}""")
+        val messages = listOf(
+            row(MessageRole.USER, "найди"),
+            row(MessageRole.ASSISTANT, "\n\n", calls = listOf(search)).copy(reasoning = "ищу"),
+            row(MessageRole.TOOL, results, toolCallId = "s1"),
+            row(MessageRole.ASSISTANT, "\n", calls = listOf(read)).copy(reasoning = "читаю"),
+            row(MessageRole.TOOL, "page", toolCallId = "r1"),
+            row(MessageRole.ASSISTANT, "Готово"),
+        )
+
+        val reply = ChatTimeline.build(messages, draft = null)[1] as ChatItem.Reply
+
+        assertEquals(2, reply.parts.size)
+        assertEquals(listOf("s1", "r1"), (reply.parts[0] as ReplyPart.Work).calls.map { it.id })
     }
 
     @Test

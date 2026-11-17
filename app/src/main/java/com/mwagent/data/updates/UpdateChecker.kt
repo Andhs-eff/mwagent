@@ -49,8 +49,8 @@ class UpdateChecker(private val http: HttpClientProvider, installedVersion: Stri
     private data class Asset(val name: String, @SerialName("browser_download_url") val downloadUrl: String)
 
     companion object {
-        const val REPOSITORY_URL = "https://github.com/mwdevpy/mwagent"
-        private const val LATEST_RELEASE_URL = "https://api.github.com/repos/mwdevpy/mwagent/releases/latest"
+        const val REPOSITORY_URL = "https://github.com/Andhs-eff/mwagent"
+        private const val LATEST_RELEASE_URL = "https://api.github.com/repos/Andhs-eff/mwagent/releases/latest"
         private const val GITHUB_JSON = "application/vnd.github+json"
         private const val HTTP_NOT_FOUND = 404
         private const val APK_SUFFIX = ".apk"

@@ -4,6 +4,6 @@ import android.content.ClipData
 import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.Clipboard
 
-private const val CLIP_LABEL = "MW AGENT"
+private const val CLIP_LABEL = "MW Agent+"
 
 suspend fun Clipboard.copyText(text: String) = setClipEntry(ClipEntry(ClipData.newPlainText(CLIP_LABEL, text)))

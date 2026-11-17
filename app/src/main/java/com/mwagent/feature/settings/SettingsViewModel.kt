@@ -3,9 +3,12 @@ package com.mwagent.feature.settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.mwagent.data.settings.AppSettings
+import com.mwagent.data.settings.AssistantSettings
 import com.mwagent.data.settings.ChatSettings
 import com.mwagent.data.settings.InterfaceSettings
+import com.mwagent.data.settings.NotificationSettings
 import com.mwagent.data.settings.SettingsRepository
+import com.mwagent.data.settings.ToolSettings
 import com.mwagent.data.settings.VoiceSettings
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -24,8 +27,20 @@ class SettingsViewModel(private val repository: SettingsRepository) : ViewModel(
         viewModelScope.launch { repository.updateInterface(transform) }
     }
 
+    fun updateNotifications(transform: (NotificationSettings) -> NotificationSettings) {
+        viewModelScope.launch { repository.updateNotifications(transform) }
+    }
+
+    fun updateAssistant(transform: (AssistantSettings) -> AssistantSettings) {
+        viewModelScope.launch { repository.updateAssistant(transform) }
+    }
+
     fun updateVoice(transform: (VoiceSettings) -> VoiceSettings) {
         viewModelScope.launch { repository.updateVoice(transform) }
+    }
+
+    fun updateTools(transform: (ToolSettings) -> ToolSettings) {
+        viewModelScope.launch { repository.updateTools(transform) }
     }
 
     private companion object {

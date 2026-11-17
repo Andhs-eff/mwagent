@@ -86,9 +86,11 @@ class Script:
         for capture in captures:
             capture.attach(self.output)
         phone.attach(self.bridge)
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
+        previous_dir = os.getcwd()
+        loop = None
         try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
             os.chdir(self.workdir)
             exec(compile(self.code, "<agent>", "exec"), {"__name__": "__main__"})
         except SystemExit as exit_request:
@@ -102,7 +104,15 @@ class Script:
             if "tg_user" in sys.modules:
                 sys.modules["tg_user"].close_session()
             asyncio.set_event_loop(None)
-            loop.close()
+            if loop is not None:
+                try:
+                    loop.close()
+                except Exception:
+                    pass
+            try:
+                os.chdir(previous_dir)
+            except OSError:
+                pass
             phone.detach()
             for capture in captures:
                 capture.detach(self.output)

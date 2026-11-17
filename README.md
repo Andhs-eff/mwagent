@@ -128,9 +128,9 @@ The app is only a client. It sends your message to the model you chose, the mode
 <br>
 
 - Three native formats: OpenAI-compatible (anything with `/chat/completions`), Anthropic Messages and Google Gemini.
-- Custom base URL and extra headers per provider.
+- Custom base URL and extra headers per provider, plus custom per-model context window limits.
 - Live model list with search and filters for vision, reasoning and image output. New chats start with the last model you picked.
-- Streaming everywhere, including tool calls and token usage.
+- Streaming everywhere with automatic silent-drop retry, including tool calls and token usage.
 - Reasoning effort per chat with the thinking in a collapsible block. Anthropic thinking signatures, Gemini thought signatures and OpenAI `reasoning_details` are kept across tool calls.
 - Prompt caching for Claude and image output for models that can draw.
 

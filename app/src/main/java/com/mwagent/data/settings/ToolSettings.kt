@@ -41,14 +41,47 @@ data class WeatherSettings(
 }
 
 @Serializable
-enum class SearchBackend { HTML_SCRAPE, SEARXNG, BRAVE_API }
+enum class SearchBackend { HTML_SCRAPE, SEARXNG, BRAVE_API, CUSTOM }
 
 @Serializable
 data class SearchSettings(
     val backend: SearchBackend = SearchBackend.HTML_SCRAPE,
     val searxngUrl: String = "",
     val apiKey: String = "",
+    val custom: CustomSearch = CustomSearch(),
 )
+
+@Serializable
+enum class SearchMethod { GET, POST }
+
+@Serializable
+data class CustomSearch(
+    val url: String = "",
+    val method: SearchMethod = SearchMethod.POST,
+    val apiKey: String = "",
+    val headers: List<HeaderEntry> = emptyList(),
+    val body: String = "",
+    val resultsPath: String = DEFAULT_RESULTS_PATH,
+    val titleField: String = DEFAULT_TITLE_FIELD,
+    val linkField: String = DEFAULT_LINK_FIELD,
+    val snippetFields: String = DEFAULT_SNIPPET_FIELDS,
+) {
+    val needsKey: Boolean
+        get() = listOf(url, body).plus(headers.map { it.value }).any { KEY_PLACEHOLDER in it }
+
+    val isComplete: Boolean
+        get() = url.isNotBlank() && (method == SearchMethod.GET || body.isNotBlank()) && (!needsKey || apiKey.isNotBlank())
+
+    companion object {
+        const val QUERY_PLACEHOLDER = "{query}"
+        const val COUNT_PLACEHOLDER = "{count}"
+        const val KEY_PLACEHOLDER = "{key}"
+        const val DEFAULT_RESULTS_PATH = "results"
+        const val DEFAULT_TITLE_FIELD = "title"
+        const val DEFAULT_LINK_FIELD = "url"
+        const val DEFAULT_SNIPPET_FIELDS = "snippet,content,description,text,highlights"
+    }
+}
 
 @Serializable
 enum class FetchBackend { DIRECT, JINA_READER, CUSTOM }
@@ -73,7 +106,9 @@ enum class ShellMode { SANDBOX, TERMUX, SHIZUKU, ROOT }
 enum class FileScope { APP, SHARED_STORAGE, ROOT }
 
 @Serializable
-data class AccessSettings(val shell: ShellMode = ShellMode.SANDBOX, val files: FileScope = FileScope.APP)
+data class AccessSettings(val shell: ShellMode = ShellMode.SANDBOX, val files: FileScope = FileScope.APP) {
+    val usesRoot: Boolean get() = shell == ShellMode.ROOT || files == FileScope.ROOT
+}
 
 @Serializable
 data class McpServer(
@@ -84,6 +119,8 @@ data class McpServer(
     val headers: List<HeaderEntry> = emptyList(),
     val enabled: Boolean = true,
     val oauth: McpOAuthSession? = null,
+    val iconKey: String? = null,
+    val colorKey: String? = null,
 ) {
     fun requestHeaders(): List<HeaderEntry> =
         headers.filter { it.name.isNotBlank() } + listOfNotNull(apiKey.trim().takeIf { it.isNotEmpty() }?.let { HeaderEntry(AUTHORIZATION, "Bearer $it") })
@@ -115,8 +152,11 @@ data class MemorySettings(
     val embeddingApiKey: String = "",
     val embeddingModel: String = "",
 ) {
+    val canListModels: Boolean
+        get() = embeddingKind != EmbeddingKind.OFF && embeddingApiKey.isNotBlank() && baseUrl.isNotBlank()
+
     val embeddingsReady: Boolean
-        get() = embeddingKind != EmbeddingKind.OFF && embeddingApiKey.isNotBlank() && model.isNotBlank() && baseUrl.isNotBlank()
+        get() = canListModels && model.isNotBlank()
 
     val model: String
         get() = embeddingModel.trim().ifEmpty { if (embeddingKind == EmbeddingKind.GEMINI) GEMINI_MODEL else "" }
@@ -127,7 +167,16 @@ data class MemorySettings(
     val baseUrl: String
         get() = embeddingBaseUrl.trim().ifEmpty { if (embeddingKind == EmbeddingKind.GEMINI) GEMINI_BASE_URL else "" }
 
+    fun asEndpointProfile() = ProviderProfile(
+        id = ENDPOINT_ID,
+        name = ENDPOINT_ID,
+        baseUrl = baseUrl.removeSuffix("/").removeSuffix("/embeddings"),
+        apiKey = embeddingApiKey,
+        format = if (embeddingKind == EmbeddingKind.GEMINI) ApiFormat.GEMINI else ApiFormat.OPENAI,
+    )
+
     companion object {
+        private const val ENDPOINT_ID = "embeddings"
         const val GEMINI_MODEL = "gemini-embedding-2"
         const val GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
         const val GEMINI_KEY_URL = "https://aistudio.google.com/apikey"
@@ -149,6 +198,8 @@ enum class CursorShape { BIBATA_MODERN, BIBATA_ORIGINAL, ROUNDED }
 @Serializable
 data class PhoneUseSettings(
     val overlay: Boolean = true,
+    val startGlow: Boolean = true,
+    val helpSound: Boolean = true,
     val touchGuard: TouchGuard = TouchGuard.BLOCK,
     val keepAwake: Boolean = true,
     val dimScreen: Boolean = false,

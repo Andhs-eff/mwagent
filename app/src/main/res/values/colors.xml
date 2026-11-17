@@ -6,4 +6,8 @@
     <color name="widget_pill">#FF2A2E36</color>
     <color name="widget_text">#FFF1F3F7</color>
     <color name="widget_accent">#FFC3D9F5</color>
+    <color name="notification_accent">#FF5E8BFF</color>
+    <color name="notification_accent_ask">#FFF29900</color>
+    <color name="notification_accent_done">#FF1E9E52</color>
+    <color name="notification_accent_failed">#FFD93025</color>
 </resources>

@@ -35,6 +35,8 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.mwagent.AppContainer
 import com.mwagent.MainActivity
+import com.mwagent.assistant.glow.EdgeGlow
+import com.mwagent.data.settings.AssistantGlow
 import com.mwagent.data.settings.AppSettings
 import com.mwagent.data.settings.PanelSpot
 import com.mwagent.data.settings.PhonePanelState
@@ -75,6 +77,9 @@ class PhoneUseOverlay(private val service: AccessibilityService, private val con
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val windowManager = service.getSystemService(WindowManager::class.java)
     private val session = container.phoneControl.session
+    private val haptics: StateFlow<Haptics> = container.settings.settings.map { it.ui }.distinctUntilChanged()
+        .map { ui -> if (ui.haptics) Haptics(container.hapticEngine, ui.hapticStrength) else Haptics.Silent }
+        .stateIn(scope, SharingStarted.Eagerly, Haptics.Silent)
     private var shell: Shell? = null
 
     fun start() {
@@ -94,6 +99,7 @@ class PhoneUseOverlay(private val service: AccessibilityService, private val con
             session.cursor.map { if (it.pressed) it.pressToken else 0 }.distinctUntilChanged().filter { it > 0 }.collect {
                 val settings = session.settings.value
                 container.phoneSounds.play(settings.tapSound, settings.soundVolume)
+                haptics.value.tap()
             }
         }
     }
@@ -113,6 +119,7 @@ class PhoneUseOverlay(private val service: AccessibilityService, private val con
     }
 
     private fun returnToChat() {
+        if (!session.opensChatWhenDone) return
         val finished = shell?.chatId?.takeIf { session.chatId.value == null } ?: return
         service.startActivity(MainActivity.chatIntent(service, finished))
     }
@@ -156,12 +163,13 @@ class PhoneUseOverlay(private val service: AccessibilityService, private val con
         private val agentLook: StateFlow<AgentLook> = combine(appSettings.filterNotNull(), viewModel.state.map { it.agentId }.distinctUntilChanged()) { all, agentId ->
             AgentLook.of(all.agent(agentId))
         }.distinctUntilChanged().stateIn(shellScope, SharingStarted.Eagerly, AgentLook())
-        private val haptics: StateFlow<Haptics> = appSettings.filterNotNull().map { it.ui }.distinctUntilChanged()
-            .map { ui -> if (ui.haptics) Haptics(container.hapticEngine, ui.hapticStrength) else Haptics.Silent }
-            .stateIn(shellScope, SharingStarted.Eagerly, Haptics.Silent)
+        private val help: StateFlow<HelpAsk?> = viewModel.pendingPrompt.map(HelpAsk::of)
+            .stateIn(shellScope, SharingStarted.Eagerly, null)
+        private val helping: Boolean get() = help.value != null
+        private var passing = false
         private val modal: StateFlow<ModalRequest?> = combine(viewModel.pendingPrompt, viewModel.state, interruptAsked) { prompt, state, asked ->
             when {
-                prompt != null -> ModalRequest.Prompt(prompt)
+                prompt != null && HelpAsk.of(prompt) == null -> ModalRequest.Prompt(prompt)
                 state.awaitingApproval() != null -> ModalRequest.Approval(state.awaitingApproval()!!)
                 asked -> ModalRequest.Interrupt
                 else -> null
@@ -199,9 +207,16 @@ class PhoneUseOverlay(private val service: AccessibilityService, private val con
                 }
             }
             shellScope.launch {
-                panelState.map { it.minimized }.distinctUntilChanged().collect { minimized ->
-                    if (minimized) setPanelFocusable(false)
-                    panelWindow.update { applyPanel(this) }
+                combine(panelState.map { it.minimized }, help.map { it != null }) { minimized, helping -> minimized && !helping }
+                    .distinctUntilChanged().collect { minimized ->
+                        if (minimized) setPanelFocusable(false)
+                        panelWindow.update { applyPanel(this) }
+                    }
+            }
+            shellScope.launch {
+                help.map { it != null }.distinctUntilChanged().collect {
+                    refreshShield()
+                    cursorWindow.update { applyCursor(this) }
                 }
             }
         }
@@ -243,9 +258,11 @@ class PhoneUseOverlay(private val service: AccessibilityService, private val con
             panelWindow.update { applyPanel(this) }
         }
 
+        private fun refreshShield() = shieldWindow.setTouchable(!passing && !helping)
+
         fun passTouches(areas: List<TouchArea>) {
-            val passing = areas.isNotEmpty()
-            shieldWindow.setTouchable(!passing)
+            passing = areas.isNotEmpty()
+            refreshShield()
             val bounds = panelWindow.bounds()
             val gestureOverPanel = passing && (bounds == null || areas.any { it.inflated(touchSlopPx).intersects(bounds) })
             panelWindow.setTouchable(!gestureOverPanel)
@@ -278,7 +295,7 @@ class PhoneUseOverlay(private val service: AccessibilityService, private val con
 
         private fun applyCursor(params: LayoutParams) {
             params.flags = if (settings.keepAwake) params.flags or LayoutParams.FLAG_KEEP_SCREEN_ON else params.flags and LayoutParams.FLAG_KEEP_SCREEN_ON.inv()
-            params.screenBrightness = if (settings.dimScreen) DIM_BRIGHTNESS else LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+            params.screenBrightness = if (settings.dimScreen && !helping) DIM_BRIGHTNESS else LayoutParams.BRIGHTNESS_OVERRIDE_NONE
         }
 
         private fun panelParams() = LayoutParams(
@@ -303,7 +320,7 @@ class PhoneUseOverlay(private val service: AccessibilityService, private val con
         }
 
         private fun applyPanel(params: LayoutParams) {
-            if (panelState.value.minimized) {
+            if (panelState.value.minimized && !helping) {
                 params.gravity = Gravity.TOP or Gravity.START
                 params.width = bubblePx
                 params.height = bubblePx
@@ -341,10 +358,26 @@ class PhoneUseOverlay(private val service: AccessibilityService, private val con
         private fun CursorContent() {
             val cursor by session.cursor.collectAsStateWithLifecycle()
             val current by session.settings.collectAsStateWithLifecycle()
+            val asked by help.collectAsStateWithLifecycle()
             Box(Modifier.fillMaxSize()) {
-                if (current.dimScreen) Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = DIM_SCRIM_ALPHA)))
+                if (current.dimScreen && asked == null) Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = DIM_SCRIM_ALPHA)))
                 CursorLayer(cursor, current, acknowledgements)
+                if (current.startGlow) StartGlow()
             }
+        }
+
+        @Composable
+        private fun StartGlow() {
+            val look by container.assistantSettings.collectAsStateWithLifecycle()
+            val configured = look ?: return
+            EdgeGlow(
+                glow = configured.glow.takeUnless { it == AssistantGlow.OFF } ?: AssistantGlow.ACCENT,
+                grid = configured.glowGrid,
+                thickness = configured.glowThickness,
+                durationSeconds = START_GLOW_SECONDS,
+                play = true,
+                sweep = true,
+            )
         }
 
         @Composable
@@ -363,7 +396,8 @@ class PhoneUseOverlay(private val service: AccessibilityService, private val con
         private fun PanelContent() {
             val panel by panelState.collectAsStateWithLifecycle()
             val state by viewModel.state.collectAsStateWithLifecycle()
-            if (panel.minimized) {
+            val asked by help.collectAsStateWithLifecycle()
+            if (panel.minimized && asked == null) {
                 PhoneBubble(isWorking = state.isStreaming, actions = bubbleActions)
             } else {
                 val current by session.settings.collectAsStateWithLifecycle()
@@ -378,6 +412,8 @@ class PhoneUseOverlay(private val service: AccessibilityService, private val con
                     status = cursor.caption,
                     plateMaxHeight = maxHeight.coerceAtLeast(MIN_PLATE_HEIGHT),
                     actions = panelActions,
+                    help = asked,
+                    onHelpAnswer = { answer -> asked?.let { viewModel.answerPrompt(it.pending, answer) } },
                 )
             }
         }
@@ -459,6 +495,7 @@ class PhoneUseOverlay(private val service: AccessibilityService, private val con
         const val EDGE_MARGIN_DP = 12
         const val DIP_MARGIN_DP = 32
         const val SNAP_MS = 220L
+        const val START_GLOW_SECONDS = 2.2f
         val MIN_PLATE_HEIGHT = 96.dp
     }
 }

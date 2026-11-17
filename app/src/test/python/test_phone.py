@@ -369,8 +369,10 @@ class RoutineTest(unittest.TestCase):
     def test_no_folder_means_no_routines(self):
         with tempfile.TemporaryDirectory() as empty:
             os.chdir(empty)
-
-            self.assertEqual([], phone.routines())
+            try:
+                self.assertEqual([], phone.routines())
+            finally:
+                os.chdir(self.folder.name)
 
     def test_a_routine_runs_with_params_and_the_same_phone(self):
         result = phone.routine("greet", target="OK")

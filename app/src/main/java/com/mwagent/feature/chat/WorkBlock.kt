@@ -36,6 +36,7 @@ import com.mwagent.tools.ShowDiagramTool
 import com.mwagent.system.control.PhoneSay
 import com.mwagent.tools.phone.PhoneActionTool
 import com.mwagent.tools.phone.PhoneScreenTool
+import com.mwagent.tools.phone.PhoneHandoffTool
 import com.mwagent.tools.phone.PhoneScreenshotTool
 import com.mwagent.tools.system.RunCommandTool
 import com.mwagent.tools.system.RunPythonTool
@@ -178,6 +179,8 @@ internal fun readableArguments(arguments: JsonObject): String = arguments.entrie
 @Composable
 private fun ToolLook.titleText(): String = title.asString().trim()
 
+internal fun ToolCallUi.title(): UiText = ToolLook.of(this).title
+
 private data class ToolLook(val icon: ImageVector, val title: UiText) {
     companion object {
         private const val MAX_RESULT_CHARS = 3_000
@@ -201,6 +204,7 @@ private data class ToolLook(val icon: ImageVector, val title: UiText) {
                 PhoneScreenTool.NAME -> UiText.Resource(if (running) R.string.chat_tool_looking_phone else R.string.chat_tool_looked_phone)
                 PhoneScreenshotTool.NAME -> UiText.Resource(if (running) R.string.chat_tool_shooting_phone else R.string.chat_tool_shot_phone)
                 PhoneActionTool.NAME -> UiText.Resource(R.string.chat_tool_phone_action, listOf(phoneStep(args)))
+                PhoneHandoffTool.NAME -> UiText.Resource(R.string.chat_tool_phone_handoff, listOf(args.optionalString("reason").orEmpty()))
                 RunCommandTool.NAME -> UiText.Resource(
                     if (running) R.string.chat_tool_running_command else R.string.chat_tool_command,
                     listOf(args.optionalString("command")?.lineSequence()?.first()?.take(COMMAND_PREVIEW_CHARS).orEmpty()),

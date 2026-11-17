@@ -12,11 +12,13 @@ import android.view.accessibility.AccessibilityNodeInfo
 import android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction
 import androidx.annotation.StringRes
 import com.mwagent.R
+import com.mwagent.assistant.AssistantPresence
 import kotlinx.coroutines.delay
 
 internal class PhoneExecutor(
     private val context: Context,
     private val session: PhoneUseSession,
+    private val assistant: AssistantPresence,
     private val reader: ScreenReader,
     private val gestures: PhoneGestures,
     private val injector: InputInjector,
@@ -25,8 +27,8 @@ internal class PhoneExecutor(
 
     suspend fun run(service: AccessibilityService, request: PhoneRequest): PhoneReport {
         val reports = mutableListOf<StepReport>()
-        val beforeElements = if (request.observe == Observe.CHANGES) reader.snapshot(service).elements else emptyList()
-        val before = reader.probe(service)
+        val beforeScreen = if (request.observe == Observe.NONE) null else reader.snapshot(service)
+        val before = beforeScreen?.probe ?: reader.probe(service)
         for ((index, step) in request.steps.withIndex()) {
             val result = runStep(service, step)
             reports += StepReport(step.action.title(), result)
@@ -38,29 +40,39 @@ internal class PhoneExecutor(
         val after = snapshot?.probe ?: reader.probe(service)
         val changed = after.fingerprint != before.fingerprint
         val hint = LOOP_HINT.takeIf { repeats.record(request.steps.joinToString("|") { it.action.title() }, changed) }
-        return PhoneReport(reports, changed, snapshot?.let { observation(request.observe, it, beforeElements, changed) }, hint)
+        val observed = snapshot?.let { observation(service, request, it, beforeScreen, changed) }
+        return PhoneReport(reports, changed, observed, hint, request.observe, snapshot?.isSparse == true)
     }
 
     suspend fun read(service: AccessibilityService, detailed: Boolean, find: ElementSelector?): ScreenReading {
         val leftOwnApp = reader.isOwnAppInFront(service)
         if (leftOwnApp) leaveOwnApp(service)
         val snapshot = reader.snapshot(service)
-        val description = snapshot.describe(detailed, find)
+        val description = withState(service, snapshot.describe(detailed, find))
         return ScreenReading(snapshot, if (leftOwnApp) "$HOME_FIRST_NOTE\n$description" else description)
     }
 
-    private fun observation(observe: Observe, snapshot: ScreenSnapshot, before: List<ScreenElement>, changed: Boolean): String = when (observe) {
-        Observe.SCREEN -> snapshot.describe()
-        Observe.CHANGES -> {
-            val changes = ScreenChanges.between(before, snapshot.elements)
-            "App: ${snapshot.packageName ?: "unknown"}\n" + if (changed && !changes.isEmpty) changes.describe() else "No visible changes"
+    private fun observation(service: AccessibilityService, request: PhoneRequest, snapshot: ScreenSnapshot, before: ScreenSnapshot?, changed: Boolean): String {
+        if (request.observe == Observe.SCREEN) return withState(service, snapshot.describe())
+        val changes = ScreenChanges.between(before?.elements.orEmpty(), snapshot.elements)
+        val navigated = before?.packageName != snapshot.packageName ||
+            request.steps.any { it.action.opensScreen() } ||
+            changes.replacesScreen(before?.elements?.size ?: 0, snapshot.elements.size)
+        if (navigated) return withState(service, snapshot.describe())
+        val summary = "App: ${snapshot.packageName ?: "unknown"}\n" + when {
+            !changes.isEmpty -> changes.describe()
+            changed -> NOTHING_NEW
+            else -> NOTHING_CHANGED
         }
-        Observe.NONE -> ""
+        return withState(service, summary)
     }
+
+    private fun withState(service: AccessibilityService, text: String): String = reader.state(service)?.let { "$text\n$it" } ?: text
 
     private suspend fun runStep(service: AccessibilityService, step: PhoneStep): ActionResult {
         val action = step.action
         val say = step.say
+        if (action.mayChangeScreen()) stepAsideForAssistant(service)
         val leftOwnApp = action.touchesScreen() && reader.isOwnAppInFront(service)
         if (leftOwnApp) {
             leaveOwnApp(service)
@@ -272,10 +284,10 @@ internal class PhoneExecutor(
         val screen = reader.screenSize(service)
         val box = container?.box ?: ScreenBox(0, 0, screen.x, screen.y)
         session.aim(box.centerX, box.centerY, caption)
-        if (container?.node?.let { scrollNode(it, action.direction) } == true) return ActionResult.Done("Scrolled ${action.direction.key}")
+        if (container?.node?.let { scrollNode(it, action.direction) } == true) return ActionResult.Done(scrolled(action.direction))
         val plan = SwipePlanner.inside(box, action.direction.opposite)
         return session.dragging(plan.from.x, plan.from.y, plan.to.x, plan.to.y, plan.durationMs, caption) {
-            if (swipeWithFallbacks(service, plan)) ActionResult.Done("Scrolled ${action.direction.key} with a swipe") else ActionResult.Failed("The system cancelled the gesture")
+            if (swipeWithFallbacks(service, plan)) ActionResult.Done("${scrolled(action.direction)}, done with a swipe") else ActionResult.Failed("The system cancelled the gesture")
         }
     }
 
@@ -376,9 +388,14 @@ internal class PhoneExecutor(
         val label = spec.direction?.takeUnless { it.isDiagonal }?.let { directionLabel(it) }
         val caption = if (label != null) caption(say, R.string.phone_use_swipe, label) else caption(say, R.string.phone_use_swipe_any)
         return session.dragging(plan.from.x, plan.from.y, plan.to.x, plan.to.y, plan.durationMs, caption) {
-            if (swipeWithFallbacks(service, plan)) ActionResult.Done("Swiped from ${plan.from.x},${plan.from.y} to ${plan.to.x},${plan.to.y}") else ActionResult.Failed("The system cancelled the swipe gesture")
+            if (swipeWithFallbacks(service, plan)) ActionResult.Done(swiped(plan)) else ActionResult.Failed("The system cancelled the swipe gesture")
         }
     }
+
+    private fun scrolled(direction: SwipeDirection) = "Scrolled ${direction.key}, a list under it now shows ${direction.revealed}"
+
+    private fun swiped(plan: SwipePlan) =
+        "Swiped ${plan.finger.key} from ${plan.from.x},${plan.from.y} to ${plan.to.x},${plan.to.y}: the finger moved ${plan.finger.key}, so a list under it now shows ${plan.finger.opposite.revealed}"
 
     private suspend fun swipeWithFallbacks(service: AccessibilityService, plan: SwipePlan): Boolean =
         retrying { gestures.swipe(service, plan.from, plan.to, plan.durationMs) } || injector.swipe(plan.from, plan.to, plan.durationMs)
@@ -410,6 +427,9 @@ internal class PhoneExecutor(
 
     private suspend fun openApp(service: AccessibilityService, name: String, say: String?): ActionResult {
         val app = InstalledApps.find(service.packageManager, name) ?: return ActionResult.Failed("No installed app matches \"$name\"")
+        if (reader.frontRoot(service)?.packageName == app.packageName) {
+            return ActionResult.Done("${app.label} is already in front, nothing to open")
+        }
         session.say(caption(say, R.string.phone_use_open, app.label))
         val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
             .setComponent(app.component)
@@ -417,7 +437,29 @@ internal class PhoneExecutor(
         val started = runCatching { service.startActivity(intent) }
         if (started.isFailure) return ActionResult.Failed("Could not open ${app.label}: ${started.exceptionOrNull()?.message}")
         val arrived = waiter(service).await(WaitCondition.AppInFront(app.packageName), OPEN_APP_WAIT_MS)
-        return ActionResult.Done(if (arrived.met) "Opened ${app.label}" else "Started ${app.label}, it may still be loading")
+        val loaded = arrived.met && awaitLoaded(service)
+        return ActionResult.Done(
+            when {
+                loaded -> "Opened ${app.label}"
+                arrived.met -> "Opened ${app.label}, but it is still loading, read the screen again or wait_for what you need"
+                else -> "Started ${app.label}, it may still be loading"
+            },
+        )
+    }
+
+    private suspend fun awaitLoaded(service: AccessibilityService): Boolean {
+        var waited = 0L
+        var quietFor = 0L
+        var previous = reader.probe(service)
+        while (waited < LOAD_MAX_MS) {
+            delay(SETTLE_POLL_MS)
+            waited += SETTLE_POLL_MS
+            val current = reader.probe(service)
+            quietFor = if (current.fingerprint == previous.fingerprint) quietFor + SETTLE_POLL_MS else 0L
+            previous = current
+            if (quietFor >= LOAD_QUIET_MS && !current.loading) return true
+        }
+        return false
     }
 
     private suspend fun pause(millis: Long, say: String?): ActionResult {
@@ -431,11 +473,16 @@ internal class PhoneExecutor(
         return ActionResult.Done("Waited $millis ms")
     }
 
+    suspend fun awaitCondition(service: AccessibilityService, condition: WaitCondition, timeoutMs: Long): WaitOutcome =
+        waiter(service).await(resolved(service, condition), timeoutMs)
+
+    private fun resolved(service: AccessibilityService, condition: WaitCondition): WaitCondition = when (condition) {
+        is WaitCondition.AppInFront -> WaitCondition.AppInFront(InstalledApps.find(service.packageManager, condition.packageName)?.packageName ?: condition.packageName)
+        else -> condition
+    }
+
     private suspend fun waitFor(service: AccessibilityService, action: PhoneAction.WaitFor, say: String?): ActionResult {
-        val condition = when (val wanted = action.condition) {
-            is WaitCondition.AppInFront -> WaitCondition.AppInFront(InstalledApps.find(service.packageManager, wanted.packageName)?.packageName ?: wanted.packageName)
-            else -> wanted
-        }
+        val condition = resolved(service, action.condition)
         session.say(caption(say, R.string.phone_use_wait_for, waitSubject(condition)))
         session.waiting(true)
         try {
@@ -467,6 +514,12 @@ internal class PhoneExecutor(
             if (current == previous) return
             previous = current
         }
+    }
+
+    private suspend fun stepAsideForAssistant(service: AccessibilityService) {
+        if (!assistant.isShowing.value) return
+        assistant.dismiss()
+        settle(service, SETTLE_BETWEEN_MS)
     }
 
     private suspend fun leaveOwnApp(service: AccessibilityService) {
@@ -510,6 +563,8 @@ internal class PhoneExecutor(
 
     companion object {
         private const val HOME_FIRST_NOTE = "(The assistant's own app was in front, so I went to the home screen first.)"
+        private const val NOTHING_CHANGED = "Nothing changed on the screen."
+        private const val NOTHING_NEW = "Nothing appeared, vanished or changed state, only the layout moved."
         private const val LOOP_HINT = "Hint: the same action has changed nothing three times in a row. Try another element or approach, scroll, or look at the pixels with phone_screenshot."
         private const val CAPTION_LABEL_CHARS = 40
         private const val GESTURE_ATTEMPTS = 2
@@ -522,6 +577,8 @@ internal class PhoneExecutor(
         private const val SETTLE_SCROLL_MS = 450L
         private const val LEAVE_APP_WAIT_MS = 1_500L
         private const val OPEN_APP_WAIT_MS = 3_000L
+        private const val LOAD_MAX_MS = 6_000L
+        private const val LOAD_QUIET_MS = 500L
         private const val SCROLL_STEP_MS = 420L
         private const val CENTER_TOLERANCE = 0.3f
         private const val MIN_CENTER_REACH = 0.15f
@@ -529,6 +586,12 @@ internal class PhoneExecutor(
         private const val DRAG_PER_POINT_MS = 120L
         private val SUBMIT_LABEL = Regex("""(?i)\b(search|send|go|done|submit|enter|ok)\b|найти|поиск|искать|отправить|готово|перейти|далее""")
     }
+}
+
+internal fun PhoneAction.opensScreen(): Boolean = when (this) {
+    is PhoneAction.OpenApp -> true
+    is PhoneAction.Press -> key == GlobalKey.HOME || key == GlobalKey.RECENTS || key == GlobalKey.BACK
+    else -> false
 }
 
 internal fun PhoneAction.touchesScreen(): Boolean = when (this) {

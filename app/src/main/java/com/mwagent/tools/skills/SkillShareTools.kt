@@ -18,7 +18,7 @@ import kotlinx.serialization.json.JsonObject
 class SkillExportTool(private val skills: SkillLibrary, private val attachments: AttachmentStore) : Tool {
     override val spec = ToolSpec(
         name = NAME,
-        description = "Exports a saved skill as a .py file: it is saved to Downloads/MW AGENT and shown in the chat, so the user can " +
+        description = "Exports a saved skill as a .py file: it is saved to Downloads/MW Agent+ and shown in the chat, so the user can " +
             "send it to someone. The other person imports it with ${SkillImportTool.NAME}.",
         parameters = objectSchema(required = listOf("name")) {
             stringProperty("name", "Skill name")
@@ -30,7 +30,7 @@ class SkillExportTool(private val skills: SkillLibrary, private val attachments:
         val skill = skills.find(name) ?: return ToolOutcome.error("No skill called $name")
         val file = attachments.importLocal(skill.file, forModel = false)
         attachments.exportToDownloads(attachments.viewable(file))
-        return ToolOutcome("Skill $name saved to Downloads/MW AGENT/${skill.file.name} and attached", attachments = listOf(file))
+        return ToolOutcome("Skill $name saved to Downloads/MW Agent+/${skill.file.name} and attached", attachments = listOf(file))
     }
 
     companion object {

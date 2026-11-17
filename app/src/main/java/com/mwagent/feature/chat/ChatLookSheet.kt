@@ -1,5 +1,6 @@
 package com.mwagent.feature.chat
 
+import com.mwagent.ui.components.AppBottomSheet
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -14,7 +15,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.toShape
@@ -33,7 +33,10 @@ import com.mwagent.data.chat.ChatShape
 import com.mwagent.data.chat.ChatTint
 import com.mwagent.ui.components.ChatBadge
 import com.mwagent.ui.components.SectionHeader
-import com.mwagent.ui.components.colors
+import com.mwagent.ui.components.GlyphGrid
+import com.mwagent.ui.components.Option
+import com.mwagent.ui.components.OptionGrid
+import com.mwagent.ui.components.TintGrid
 import com.mwagent.ui.components.icon
 import com.mwagent.ui.components.polygon
 import com.mwagent.ui.haptics.rememberHaptics
@@ -46,7 +49,7 @@ fun ChatLookSheet(look: ChatLook, onChange: (ChatLook) -> Unit, onDismiss: () ->
         haptics.tick()
         onChange(updated)
     }
-    ModalBottomSheet(onDismissRequest = onDismiss, modifier = Modifier.clickHaptics()) {
+    AppBottomSheet(onDismissRequest = onDismiss, modifier = Modifier.clickHaptics()) {
         Column(
             modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).navigationBarsPadding(),
         ) {
@@ -54,22 +57,9 @@ fun ChatLookSheet(look: ChatLook, onChange: (ChatLook) -> Unit, onDismiss: () ->
                 ChatBadge(look, size = PREVIEW_SIZE)
             }
             SectionHeader(stringResource(R.string.chat_look_icon))
-            OptionGrid {
-                ChatGlyph.entries.forEach { glyph ->
-                    Option(selected = glyph == look.glyph, onClick = { pick(look.copy(glyph = glyph)) }) {
-                        Icon(glyph.icon, contentDescription = glyph.key, modifier = Modifier.size(24.dp))
-                    }
-                }
-            }
+            GlyphGrid(look.glyph) { pick(look.copy(glyph = it)) }
             SectionHeader(stringResource(R.string.chat_look_color))
-            OptionGrid {
-                ChatTint.entries.forEach { tint ->
-                    val colors = tint.colors()
-                    Option(selected = tint == look.tint, onClick = { pick(look.copy(tint = tint)) }, container = colors.container) {
-                        Icon(look.glyph.icon, contentDescription = tint.key, tint = colors.content, modifier = Modifier.size(20.dp))
-                    }
-                }
-            }
+            TintGrid(look.tint, look.glyph.icon) { pick(look.copy(tint = it)) }
             SectionHeader(stringResource(R.string.chat_look_shape))
             OptionGrid(Modifier.padding(bottom = 24.dp)) {
                 ChatShape.entries.forEach { shape ->
@@ -93,34 +83,4 @@ fun ChatLookSheet(look: ChatLook, onChange: (ChatLook) -> Unit, onDismiss: () ->
     }
 }
 
-@Composable
-private fun OptionGrid(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
-    FlowRow(
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-        modifier = modifier.fillMaxWidth(),
-    ) { content() }
-}
-
-@Composable
-private fun Option(
-    selected: Boolean,
-    onClick: () -> Unit,
-    container: Color = MaterialTheme.colorScheme.surfaceContainerHigh,
-    content: @Composable () -> Unit,
-) {
-    Surface(
-        onClick = onClick,
-        shape = CircleShape,
-        color = container,
-        contentColor = MaterialTheme.colorScheme.onSurface,
-        border = if (selected) BorderStroke(SELECTED_BORDER, MaterialTheme.colorScheme.primary) else null,
-        modifier = Modifier.size(OPTION_SIZE).semantics { this.selected = selected },
-    ) {
-        Box(contentAlignment = Alignment.Center) { content() }
-    }
-}
-
 private val PREVIEW_SIZE = 72.dp
-private val OPTION_SIZE = 48.dp
-private val SELECTED_BORDER = 3.dp

@@ -20,18 +20,14 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyListScope
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItemDefaults
-import androidx.compose.material3.ListItemShapes
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
-import androidx.compose.material3.SegmentedListItem
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -42,6 +38,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
@@ -56,6 +53,7 @@ import com.composables.icons.materialsymbols.MaterialSymbols
 import com.composables.icons.materialsymbols.rounded.Touch_app
 import com.composables.icons.materialsymbols.rounded.Adb
 import com.composables.icons.materialsymbols.rounded.Assistant
+import com.composables.icons.materialsymbols.rounded.Battery_android_full
 import com.composables.icons.materialsymbols.rounded.Call_log
 import com.composables.icons.materialsymbols.rounded.Contacts
 import com.composables.icons.materialsymbols.rounded.Content_copy
@@ -79,49 +77,70 @@ import com.mwagent.system.notifications.NotificationListener
 import com.mwagent.system.shell.AccessStatus
 import com.mwagent.system.shell.TermuxShell
 import com.mwagent.ui.components.FoldableHeader
-import com.mwagent.ui.components.SectionHeader
-import com.mwagent.ui.components.rememberSectionFolds
+import com.mwagent.ui.components.SectionFolds
 import com.mwagent.ui.components.SettingsScaffold
-import com.mwagent.ui.components.ShapeBadge
 import com.mwagent.ui.components.appViewModel
 import com.mwagent.ui.components.copyText
-import com.mwagent.ui.components.groupedListColors
+import com.mwagent.ui.components.rememberSectionFolds
 import kotlinx.coroutines.launch
 
 @Composable
 fun DeviceAccessScreen(onBack: () -> Unit) {
-    val viewModel = appViewModel { DeviceAccessViewModel(it.appContext, it.settings, it.shellAccess, it.deviceFiles, it.phoneControl) }
+    val viewModel = appViewModel { DeviceAccessViewModel(it.appContext, it.settings, it.shellAccess, it.deviceFiles, it.phoneControl, it.health) }
     val shellMode by viewModel.shellMode.collectAsStateWithLifecycle()
     val fileScope by viewModel.fileScope.collectAsStateWithLifecycle()
     val permissions by viewModel.permissions.collectAsStateWithLifecycle()
     val checkingRoot by viewModel.checkingRoot.collectAsStateWithLifecycle()
+    val actionFor = rememberPermissionActions(refresh = viewModel::refresh, requestShizuku = viewModel::requestShizukuPermission, checkRoot = viewModel::checkRoot)
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { viewModel.refresh() }
+
+    val folds = rememberSectionFolds(*AccessSection.entries.map { it.name }.toTypedArray())
+
+    SettingsScaffold(stringResource(R.string.settings_access), onBack) { padding ->
+        val shell = shellMode ?: return@SettingsScaffold
+        val files = fileScope ?: return@SettingsScaffold
+        DeviceAccessContent(
+            state = AccessState(shell, files, permissions, checkingRoot),
+            folds = folds,
+            actionFor = actionFor,
+            onSelectShell = viewModel::selectShell,
+            onSelectFiles = viewModel::selectFiles,
+            padding = padding,
+        )
+    }
+}
+
+@Composable
+internal fun rememberPermissionActions(
+    refresh: () -> Unit,
+    requestShizuku: () -> Unit = {},
+    checkRoot: () -> Unit = {},
+): (DevicePermission, AccessStatus) -> PermissionAction? {
     val context = LocalContext.current
     var microphoneDenied by rememberSaveable { mutableStateOf(false) }
     val askMicrophone = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         microphoneDenied = !granted
-        viewModel.refresh()
+        refresh()
     }
     var notificationsDenied by rememberSaveable { mutableStateOf(false) }
     val askNotifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         notificationsDenied = !granted
-        viewModel.refresh()
+        refresh()
     }
     var locationDenied by rememberSaveable { mutableStateOf(false) }
     val askLocation = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { results ->
         locationDenied = results.values.none { it }
-        viewModel.refresh()
+        refresh()
     }
-    val askTermux = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { viewModel.refresh() }
+    val askTermux = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { refresh() }
     var deniedData by rememberSaveable { mutableStateOf(listOf<String>()) }
     var askingData by rememberSaveable { mutableStateOf<String?>(null) }
     val askData = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         askingData?.takeUnless { granted }?.let { deniedData = deniedData + it }
-        viewModel.refresh()
+        refresh()
     }
-    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { viewModel.refresh() }
 
-    val statusOf = { permission: DevicePermission? -> permission?.let { permissions[it] } ?: AccessStatus.READY }
-    val actionFor = { permission: DevicePermission, status: AccessStatus ->
+    return { permission, status ->
         when (permission) {
             DevicePermission.ASSISTANT -> PermissionAction(R.string.access_action_choose) { AssistantRole.openSystemPicker(context) }
             DevicePermission.MICROPHONE -> if (microphoneDenied) {
@@ -134,6 +153,7 @@ fun DeviceAccessScreen(onBack: () -> Unit) {
             } else {
                 PermissionAction(R.string.access_action_grant) { askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS) }
             }
+            DevicePermission.BACKGROUND_WORK -> PermissionAction(R.string.access_action_grant) { context.requestUnrestrictedBackground() }
             DevicePermission.LOCATION -> if (locationDenied) {
                 PermissionAction(R.string.access_action_open_settings) { context.openAppDetails() }
             } else {
@@ -158,184 +178,246 @@ fun DeviceAccessScreen(onBack: () -> Unit) {
             }
             DevicePermission.SHIZUKU -> when (status) {
                 AccessStatus.NOT_RUNNING -> PermissionAction(R.string.access_action_open) { context.openShizuku() }
-                AccessStatus.NEEDS_PERMISSION -> PermissionAction(R.string.access_action_grant, viewModel::requestShizukuPermission)
+                AccessStatus.NEEDS_PERMISSION -> PermissionAction(R.string.access_action_grant, requestShizuku)
                 else -> null
             }
-            DevicePermission.ROOT -> PermissionAction(R.string.access_action_check, viewModel::checkRoot)
+            DevicePermission.ROOT -> PermissionAction(R.string.access_action_check, checkRoot)
         }
     }
+}
 
-    val folds = rememberSectionFolds(PermissionGroup.ESSENTIALS.name)
+internal data class AccessState(
+    val shell: ShellMode,
+    val files: FileScope,
+    val statuses: Map<DevicePermission, AccessStatus>,
+    val checkingRoot: Boolean,
+) {
+    fun statusOf(permission: DevicePermission?): AccessStatus = permission?.let { statuses[it] } ?: AccessStatus.READY
+}
 
-    SettingsScaffold(stringResource(R.string.settings_access), onBack) { padding ->
-        val shell = shellMode ?: return@SettingsScaffold
-        val files = fileScope ?: return@SettingsScaffold
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = padding.calculateTopPadding(), bottom = 32.dp),
-            verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap),
-        ) {
-            item { SectionHeader(stringResource(R.string.access_section_permissions)) }
-            item { SectionHint(R.string.access_permissions_hint) }
-            PermissionGroup.entries.forEach { group ->
-                val open = folds.isOpen(group.name)
-                item(key = "group-${group.name}") {
-                    FoldableHeader(
-                        title = stringResource(group.title),
-                        expanded = open,
-                        onToggle = { folds.toggle(group.name) },
-                        summary = stringResource(R.string.access_group_ready, group.permissions.count { statusOf(it) == AccessStatus.READY }, group.permissions.size),
+internal enum class AccessSection { PERMISSIONS, COMMANDS, FILES }
+
+private class SystemPermission(val permission: DevicePermission, val presentation: Presentation)
+
+private val SYSTEM_PERMISSIONS = listOf(
+    SystemPermission(DevicePermission.ASSISTANT, Presentation(R.string.permission_assistant, R.string.permission_assistant_summary, MaterialSymbols.Rounded.Assistant)),
+    SystemPermission(DevicePermission.MICROPHONE, Presentation(R.string.permission_microphone, R.string.permission_microphone_summary, MaterialSymbols.Rounded.Mic)),
+    SystemPermission(DevicePermission.NOTIFICATIONS, Presentation(R.string.permission_notifications, R.string.permission_notifications_summary, MaterialSymbols.Rounded.Notifications)),
+    SystemPermission(DevicePermission.BACKGROUND_WORK, Presentation(R.string.permission_background_work, R.string.permission_background_work_summary, MaterialSymbols.Rounded.Battery_android_full)),
+    SystemPermission(DevicePermission.LOCATION, Presentation(R.string.permission_location, R.string.permission_location_summary, MaterialSymbols.Rounded.Location_on)),
+    SystemPermission(DevicePermission.CONTACTS, Presentation(R.string.permission_contacts, R.string.permission_contacts_summary, MaterialSymbols.Rounded.Contacts)),
+    SystemPermission(DevicePermission.CALL_LOG, Presentation(R.string.permission_call_log, R.string.permission_call_log_summary, MaterialSymbols.Rounded.Call_log)),
+    SystemPermission(DevicePermission.PHOTOS, Presentation(R.string.permission_photos, R.string.permission_photos_summary, MaterialSymbols.Rounded.Photo_library)),
+    SystemPermission(DevicePermission.PHONE_CONTROL, Presentation(R.string.permission_phone_control, R.string.permission_phone_control_summary, MaterialSymbols.Rounded.Touch_app)),
+    SystemPermission(DevicePermission.NOTIFICATION_ACCESS, Presentation(R.string.permission_notification_access, R.string.permission_notification_access_summary, MaterialSymbols.Rounded.Notifications_unread)),
+)
+
+@Composable
+internal fun DeviceAccessContent(
+    state: AccessState,
+    folds: SectionFolds,
+    actionFor: (DevicePermission, AccessStatus) -> PermissionAction?,
+    onSelectShell: (ShellMode) -> Unit,
+    onSelectFiles: (FileScope) -> Unit,
+    padding: PaddingValues,
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = padding.calculateTopPadding(), bottom = 32.dp),
+        verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap),
+    ) {
+        val permissionsOpen = folds.isOpen(AccessSection.PERMISSIONS.name)
+        item(key = "header-permissions") {
+            FoldableHeader(
+                title = stringResource(R.string.access_section_permissions),
+                expanded = permissionsOpen,
+                onToggle = { folds.toggle(AccessSection.PERMISSIONS.name) },
+                summary = stringResource(R.string.access_group_ready, SYSTEM_PERMISSIONS.count { state.statusOf(it.permission) == AccessStatus.READY }, SYSTEM_PERMISSIONS.size),
+                modifier = Modifier.animateItem(),
+            )
+        }
+        if (permissionsOpen) {
+            item(key = "caption-permissions") { SectionCaption(R.string.access_permissions_hint, Modifier.animateItem()) }
+            SYSTEM_PERMISSIONS.forEachIndexed { index, entry ->
+                item(key = "permission-${entry.permission.name}") {
+                    val status = state.statusOf(entry.permission)
+                    PermissionCard(
+                        permission = entry.permission,
+                        presentation = entry.presentation,
+                        status = status,
+                        action = actionFor(entry.permission, status),
+                        shape = ListItemDefaults.segmentedShapes(index, SYSTEM_PERMISSIONS.size).shape,
                         modifier = Modifier.animateItem(),
                     )
                 }
-                if (open) {
-                    itemsIndexed(group.permissions, key = { _, it -> "permission-${it.name}" }) { index, permission ->
-                        val status = statusOf(permission)
-                        PermissionItem(
-                            permission = permission,
-                            status = status,
-                            action = actionFor(permission, status),
-                            isBusy = permission == DevicePermission.ROOT && checkingRoot,
-                            shapes = ListItemDefaults.segmentedShapes(index, group.permissions.size),
-                            modifier = Modifier.animateItem(),
-                        )
-                    }
-                }
             }
+        }
 
-            item { SectionHeader(stringResource(R.string.access_section_backends)) }
-            item(key = "fold-shell") {
-                FoldableHeader(
-                    title = stringResource(R.string.access_section_shell),
-                    expanded = folds.isOpen(FOLD_SHELL),
-                    onToggle = { folds.toggle(FOLD_SHELL) },
-                    summary = stringResource(shell.title),
-                    modifier = Modifier.animateItem(),
-                )
-            }
-            if (folds.isOpen(FOLD_SHELL)) {
-                item(key = "hint-shell") { SectionHint(R.string.access_shell_hint, Modifier.animateItem()) }
-                optionItems("shell", ShellMode.entries, shell, { statusOf(it.requiredPermission()) }, viewModel::selectShell) { it.presentation }
-                if (shell == ShellMode.TERMUX && statusOf(DevicePermission.TERMUX) == AccessStatus.READY) {
-                    item(key = "termux-note") { TermuxNote(Modifier.padding(top = 12.dp).animateItem()) }
+        val commandsOpen = folds.isOpen(AccessSection.COMMANDS.name)
+        item(key = "header-commands") {
+            FoldableHeader(
+                title = stringResource(R.string.access_section_shell),
+                expanded = commandsOpen,
+                onToggle = { folds.toggle(AccessSection.COMMANDS.name) },
+                summary = stringResource(state.shell.title),
+                modifier = Modifier.animateItem(),
+            )
+        }
+        if (commandsOpen) {
+            item(key = "caption-commands") { SectionCaption(R.string.access_shell_hint, Modifier.animateItem()) }
+            ShellMode.entries.forEachIndexed { index, mode ->
+                item(key = "shell-${mode.name}") {
+                    val needed = mode.requiredPermission()
+                    val status = state.statusOf(needed)
+                    ChoiceCard(
+                        presentation = mode.presentation,
+                        selected = state.shell == mode,
+                        status = status.takeIf { needed != null },
+                        action = needed?.let { actionFor(it, status) },
+                        isBusy = needed == DevicePermission.ROOT && state.checkingRoot,
+                        shape = ListItemDefaults.segmentedShapes(index, ShellMode.entries.size).shape,
+                        onSelect = { onSelectShell(mode) },
+                        modifier = Modifier.animateItem(),
+                    )
                 }
             }
-            item(key = "fold-files") {
-                FoldableHeader(
-                    title = stringResource(R.string.access_section_files),
-                    expanded = folds.isOpen(FOLD_FILES),
-                    onToggle = { folds.toggle(FOLD_FILES) },
-                    summary = stringResource(files.title),
-                    modifier = Modifier.animateItem(),
-                )
+            if (state.shell == ShellMode.TERMUX && state.statusOf(DevicePermission.TERMUX) == AccessStatus.READY) {
+                item(key = "termux-note") { TermuxNote(Modifier.padding(top = 12.dp).animateItem()) }
             }
-            if (folds.isOpen(FOLD_FILES)) {
-                item(key = "hint-files") { SectionHint(R.string.access_files_hint, Modifier.animateItem()) }
-                optionItems("files", FileScope.entries, files, { statusOf(it.requiredPermission()) }, viewModel::selectFiles) { it.presentation }
+        }
+
+        val filesOpen = folds.isOpen(AccessSection.FILES.name)
+        item(key = "header-files") {
+            FoldableHeader(
+                title = stringResource(R.string.access_section_files),
+                expanded = filesOpen,
+                onToggle = { folds.toggle(AccessSection.FILES.name) },
+                summary = stringResource(state.files.title),
+                modifier = Modifier.animateItem(),
+            )
+        }
+        if (filesOpen) {
+            item(key = "caption-files") { SectionCaption(R.string.access_files_hint, Modifier.animateItem()) }
+            FileScope.entries.forEachIndexed { index, scope ->
+                item(key = "files-${scope.name}") {
+                    val needed = scope.requiredPermission()
+                    val status = state.statusOf(needed)
+                    ChoiceCard(
+                        presentation = scope.presentation,
+                        selected = state.files == scope,
+                        status = status.takeIf { needed != null },
+                        action = needed?.let { actionFor(it, status) },
+                        isBusy = needed == DevicePermission.ROOT && state.checkingRoot,
+                        shape = ListItemDefaults.segmentedShapes(index, FileScope.entries.size).shape,
+                        onSelect = { onSelectFiles(scope) },
+                        modifier = Modifier.animateItem(),
+                    )
+                }
             }
         }
     }
 }
 
-private enum class PermissionGroup(@StringRes val title: Int, val permissions: List<DevicePermission>) {
-    ESSENTIALS(R.string.access_group_essentials, listOf(DevicePermission.ASSISTANT, DevicePermission.MICROPHONE, DevicePermission.NOTIFICATIONS, DevicePermission.LOCATION)),
-    PERSONAL(R.string.access_group_personal, listOf(DevicePermission.CONTACTS, DevicePermission.CALL_LOG, DevicePermission.PHOTOS)),
-    STORAGE(R.string.access_group_storage, listOf(DevicePermission.ALL_FILES)),
-    CONTROL(R.string.access_group_control, listOf(DevicePermission.PHONE_CONTROL, DevicePermission.NOTIFICATION_ACCESS)),
-    ELEVATED(R.string.access_group_elevated, listOf(DevicePermission.TERMUX, DevicePermission.SHIZUKU, DevicePermission.ROOT)),
-}
-
-private const val FOLD_SHELL = "shell"
-private const val FOLD_FILES = "files"
-
-private data class PermissionAction(@StringRes val label: Int, val onClick: () -> Unit)
+internal data class PermissionAction(@StringRes val label: Int, val onClick: () -> Unit)
 
 private data class Presentation(@StringRes val title: Int, @StringRes val summary: Int, val icon: ImageVector)
 
 @Composable
-private fun SectionHint(@StringRes text: Int, modifier: Modifier = Modifier) {
+private fun SectionCaption(@StringRes text: Int, modifier: Modifier = Modifier) {
     Text(
         stringResource(text),
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = modifier.padding(start = 12.dp, end = 12.dp, bottom = 12.dp),
+        modifier = modifier.padding(start = 12.dp, end = 12.dp, bottom = 8.dp),
     )
 }
 
 @Composable
-private fun PermissionItem(
+private fun PermissionCard(
     permission: DevicePermission,
+    presentation: Presentation,
     status: AccessStatus,
     action: PermissionAction?,
-    isBusy: Boolean,
-    shapes: ListItemShapes,
+    shape: Shape,
     modifier: Modifier = Modifier,
 ) {
-    val presentation = permission.presentation
-    SegmentedListItem(
-        onClick = { if (status != AccessStatus.READY && !isBusy) action?.onClick?.invoke() },
-        enabled = status == AccessStatus.READY || action != null,
-        shapes = shapes,
-        colors = groupedListColors(),
+    val ready = status == AccessStatus.READY
+    SettingCard(
+        icon = presentation.icon,
+        title = stringResource(presentation.title),
+        summary = stringResource(presentation.summary),
+        shape = shape,
+        onClick = action?.onClick?.takeIf { !ready },
         modifier = modifier,
-        leadingContent = { ShapeBadge(presentation.icon) },
-        supportingContent = {
-            Column {
-                Text(stringResource(presentation.summary))
-                if (status != AccessStatus.READY) StatusLabel(status)
-                if (permission == DevicePermission.PHONE_CONTROL && status == AccessStatus.NEEDS_PERMISSION && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    Text(stringResource(R.string.permission_phone_control_restricted), style = MaterialTheme.typography.bodySmall)
-                }
-            }
-        },
-        trailingContent = {
-            when {
-                isBusy -> LoadingIndicator(Modifier.size(BUSY_INDICATOR_SIZE))
-                status == AccessStatus.READY -> Icon(
+        trailing = {
+            if (ready) {
+                Icon(
                     MaterialSymbols.RoundedFilled.Check_circle,
                     contentDescription = stringResource(R.string.access_status_ready),
                     tint = MaterialTheme.colorScheme.primary,
                 )
-                action != null -> FilledTonalButton(
-                    onClick = action.onClick,
-                    shapes = ButtonDefaults.shapes(),
-                    contentPadding = ButtonDefaults.ExtraSmallContentPadding,
-                ) { Text(stringResource(action.label)) }
+            } else {
+                action?.let { ActionButton(it) }
             }
         },
-    ) { Text(stringResource(presentation.title), style = MaterialTheme.typography.titleMediumEmphasized) }
+        below = if (ready) null else {
+            {
+                StatusLabel(status)
+                if (permission == DevicePermission.PHONE_CONTROL && status == AccessStatus.NEEDS_PERMISSION && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    PermissionHint(R.string.permission_phone_control_restricted)
+                }
+                if (permission == DevicePermission.BACKGROUND_WORK) PermissionHint(R.string.permission_background_work_hint)
+            }
+        },
+    )
 }
 
-private fun <T> LazyListScope.optionItems(
-    group: String,
-    options: List<T>,
-    selected: T,
-    statusOf: (T) -> AccessStatus,
-    onSelect: (T) -> Unit,
-    presentationOf: (T) -> Presentation,
+@Composable
+private fun PermissionHint(@StringRes text: Int) {
+    Text(stringResource(text), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+}
+
+@Composable
+private fun ChoiceCard(
+    presentation: Presentation,
+    selected: Boolean,
+    status: AccessStatus?,
+    action: PermissionAction?,
+    isBusy: Boolean,
+    shape: Shape,
+    onSelect: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    itemsIndexed(options, key = { _, option -> "$group-$option" }) { index, option ->
-        val presentation = presentationOf(option)
-        val status = statusOf(option)
-        SegmentedListItem(
-            onClick = { onSelect(option) },
-            shapes = ListItemDefaults.segmentedShapes(index, options.size),
-            colors = groupedListColors(),
-            modifier = Modifier.animateItem(),
-            leadingContent = { ShapeBadge(presentation.icon) },
-            supportingContent = {
-                Column {
-                    Text(stringResource(presentation.summary))
-                    if (status != AccessStatus.READY) Text(
-                        stringResource(R.string.access_needs_setup),
-                        color = status.color(),
-                        style = MaterialTheme.typography.labelLarge,
-                    )
+    SettingCard(
+        icon = presentation.icon,
+        title = stringResource(presentation.title),
+        summary = stringResource(presentation.summary),
+        shape = shape,
+        selected = selected,
+        onClick = onSelect,
+        modifier = modifier,
+        trailing = { RadioButton(selected = selected, onClick = null) },
+        below = status?.let { current ->
+            {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    Column(Modifier.weight(1f)) { StatusLabel(current) }
+                    when {
+                        isBusy -> LoadingIndicator(Modifier.size(BUSY_INDICATOR_SIZE))
+                        current != AccessStatus.READY -> action?.let { ActionButton(it) }
+                    }
                 }
-            },
-            trailingContent = { RadioButton(selected = option == selected, onClick = null) },
-        ) { Text(stringResource(presentation.title), style = MaterialTheme.typography.titleMediumEmphasized) }
-    }
+            }
+        },
+    )
+}
+
+@Composable
+private fun ActionButton(action: PermissionAction) {
+    FilledTonalButton(
+        onClick = action.onClick,
+        shapes = ButtonDefaults.shapes(),
+        contentPadding = ButtonDefaults.ExtraSmallContentPadding,
+    ) { Text(stringResource(action.label)) }
 }
 
 @Composable
@@ -382,23 +464,6 @@ private val AccessStatus.label: Int
         AccessStatus.NOT_RUNNING -> R.string.access_status_not_running
         AccessStatus.NEEDS_PERMISSION -> R.string.access_status_needs_permission
         AccessStatus.UNAVAILABLE -> R.string.access_status_unavailable
-    }
-
-private val DevicePermission.presentation: Presentation
-    get() = when (this) {
-        DevicePermission.ASSISTANT -> Presentation(R.string.permission_assistant, R.string.permission_assistant_summary, MaterialSymbols.Rounded.Assistant)
-        DevicePermission.MICROPHONE -> Presentation(R.string.permission_microphone, R.string.permission_microphone_summary, MaterialSymbols.Rounded.Mic)
-        DevicePermission.NOTIFICATIONS -> Presentation(R.string.permission_notifications, R.string.permission_notifications_summary, MaterialSymbols.Rounded.Notifications)
-        DevicePermission.LOCATION -> Presentation(R.string.permission_location, R.string.permission_location_summary, MaterialSymbols.Rounded.Location_on)
-        DevicePermission.CONTACTS -> Presentation(R.string.permission_contacts, R.string.permission_contacts_summary, MaterialSymbols.Rounded.Contacts)
-        DevicePermission.CALL_LOG -> Presentation(R.string.permission_call_log, R.string.permission_call_log_summary, MaterialSymbols.Rounded.Call_log)
-        DevicePermission.PHOTOS -> Presentation(R.string.permission_photos, R.string.permission_photos_summary, MaterialSymbols.Rounded.Photo_library)
-        DevicePermission.ALL_FILES -> Presentation(R.string.permission_all_files, R.string.permission_all_files_summary, MaterialSymbols.Rounded.Storage)
-        DevicePermission.PHONE_CONTROL -> Presentation(R.string.permission_phone_control, R.string.permission_phone_control_summary, MaterialSymbols.Rounded.Touch_app)
-        DevicePermission.NOTIFICATION_ACCESS -> Presentation(R.string.permission_notification_access, R.string.permission_notification_access_summary, MaterialSymbols.Rounded.Notifications_unread)
-        DevicePermission.TERMUX -> Presentation(R.string.access_mode_termux, R.string.permission_termux_summary, MaterialSymbols.Rounded.Terminal)
-        DevicePermission.SHIZUKU -> Presentation(R.string.access_mode_shizuku, R.string.permission_shizuku_summary, MaterialSymbols.Rounded.Adb)
-        DevicePermission.ROOT -> Presentation(R.string.access_mode_root, R.string.access_mode_root_summary, MaterialSymbols.Rounded.Shield_lock)
     }
 
 private val ShellMode.presentation: Presentation
@@ -451,6 +516,14 @@ private fun Context.openNotificationAccess() {
         startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS).putExtra(Settings.EXTRA_NOTIFICATION_LISTENER_COMPONENT_NAME, component))
     } catch (e: ActivityNotFoundException) {
         startActivity(list)
+    }
+}
+
+private fun Context.requestUnrestrictedBackground() {
+    try {
+        startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, "package:$packageName".toUri()))
+    } catch (e: ActivityNotFoundException) {
+        startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
     }
 }
 

@@ -69,9 +69,9 @@ class McpSignIn(private val oauth: McpOAuth, private val settings: SettingsRepos
     private class PendingSignIn(val serverId: String, val server: AuthServer, val client: OAuthClient, val pkce: Pkce, val state: String)
 
     companion object {
-        private const val REDIRECT_SCHEME = "mwagent"
+        private const val REDIRECT_SCHEME = "mwagent-andhs"
         private const val REDIRECT_HOST = "oauth"
         private const val REDIRECT_URI = "$REDIRECT_SCHEME://$REDIRECT_HOST/callback"
-        private const val CLIENT_NAME = "MW AGENT"
+        private const val CLIENT_NAME = "MW Agent+"
     }
 }

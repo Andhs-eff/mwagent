@@ -1,14 +1,18 @@
 package com.mwagent.feature.chat
 
+import androidx.annotation.StringRes
 import com.mwagent.R
+import com.mwagent.conversation.ReplyErrors
 import com.mwagent.conversation.StreamingDraft
 import com.mwagent.conversation.TurnAssembler
 import com.mwagent.data.attachments.Attachment
+import com.mwagent.data.chat.MessageVersions
 import com.mwagent.data.db.MessageEntity
 import com.mwagent.data.db.MessageRole
 import com.mwagent.data.db.MessageStatus
 import com.mwagent.llm.TokenUsage
 import com.mwagent.llm.ToolCall
+import com.mwagent.net.NetworkFailureKind
 import com.mwagent.tools.ChartSpec
 import com.mwagent.tools.ReplyUi
 import com.mwagent.tools.ShowChartTool
@@ -41,7 +45,12 @@ data class SourceUi(val title: String, val url: String, val host: String)
 sealed interface ChatItem {
     val id: String
 
-    data class User(override val id: String, val content: String, val attachments: List<Attachment>) : ChatItem
+    data class User(
+        override val id: String,
+        val content: String,
+        val attachments: List<Attachment>,
+        val versions: MessageVersions? = null,
+    ) : ChatItem
 
     data class Reply(
         override val id: String,
@@ -53,8 +62,11 @@ sealed interface ChatItem {
         val usage: TokenUsage?,
         val end: ReplyEnd?,
         val anchor: MessageEntity,
+        val retry: RetryNotice? = null,
     ) : ChatItem
 }
+
+data class RetryNotice(val attempt: Int, val limit: Int, val resumesAt: Long, val reason: UiText)
 
 sealed interface ReplyPart {
     data class Work(val steps: List<WorkStep>) : ReplyPart {
@@ -95,7 +107,7 @@ object ChatTimeline {
         return items.lastOrNull { item -> createdAt[item.id]?.let { it <= target } == true }?.id
     }
 
-    fun build(messages: List<MessageEntity>, draft: StreamingDraft?): List<ChatItem> {
+    fun build(messages: List<MessageEntity>, draft: StreamingDraft?, versions: Map<String, MessageVersions> = emptyMap()): List<ChatItem> {
         val results = messages.filter { it.role == MessageRole.TOOL }.associateBy { it.toolCallId }
         val visible = messages.filter { it.role == MessageRole.USER || it.role == MessageRole.ASSISTANT }
         val items = mutableListOf<ChatItem>()
@@ -112,7 +124,7 @@ object ChatTimeline {
                 pendingRounds += row
             } else {
                 flushReply(isLatest = false)
-                items += ChatItem.User(row.id, row.content, Attachment.decode(row.attachmentsJson))
+                items += ChatItem.User(row.id, row.content, Attachment.decode(row.attachmentsJson), versions[row.id])
             }
         }
         flushReply(isLatest = true)
@@ -137,6 +149,7 @@ object ChatTimeline {
             usage = usages.reduceOrNull(TokenUsage::plus),
             end = if (isActive) null else replyEnd(rounds, results, isLatest),
             anchor = rounds.first(),
+            retry = live?.retry?.let { RetryNotice(it.attempt, it.limit, it.resumesAt, errorText(it.error)) },
         )
     }
 
@@ -144,9 +157,9 @@ object ChatTimeline {
         fun parts(results: Map<String?, MessageEntity>, live: StreamingDraft?): List<ReplyPart> = buildList {
             val isLive = live != null
             if (reasoning.isNotEmpty()) {
-                add(ReplyPart.Work(listOf(WorkStep.Thought(reasoning, isStreaming = isLive && content.isEmpty() && calls.isEmpty()))))
+                add(ReplyPart.Work(listOf(WorkStep.Thought(reasoning, isStreaming = isLive && content.isBlank() && calls.isEmpty()))))
             }
-            if (content.isNotEmpty()) add(ReplyPart.Text(content, isStreaming = isLive, isStopped = row.status == MessageStatus.CANCELLED))
+            if (content.isNotBlank()) add(ReplyPart.Text(content, isStreaming = isLive, isStopped = row.status == MessageStatus.CANCELLED))
             val generated = Attachment.decode(row.attachmentsJson)
             if (generated.isNotEmpty()) add(ReplyPart.Media(generated))
             val shown = calls.filter { it.name != ShowUiTool.NAME }
@@ -164,8 +177,8 @@ object ChatTimeline {
             }
             when {
                 isLive -> Unit
-                row.status == MessageStatus.ERROR -> add(ReplyPart.Error(row.errorText?.let(UiText::Raw) ?: UiText.Resource(R.string.chat_error_unknown)))
-                row.status == MessageStatus.COMPLETE && content.isEmpty() && calls.isEmpty() && generated.isEmpty() -> add(ReplyPart.Error(UiText.Resource(R.string.chat_error_empty_response)))
+                row.status == MessageStatus.ERROR -> add(ReplyPart.Error(errorText(row.errorText)))
+                row.status == MessageStatus.COMPLETE && content.isBlank() && calls.isEmpty() && generated.isEmpty() -> add(ReplyPart.Error(UiText.Resource(R.string.chat_error_empty_response)))
             }
         }
 
@@ -181,6 +194,24 @@ object ChatTimeline {
             }
         }
     }
+
+    private fun errorText(stored: String?): UiText {
+        val network = stored?.let(ReplyErrors::decodeNetwork)
+        return when {
+            network != null -> UiText.Resource(network.kind.message, listOf(network.detail))
+            stored != null -> UiText.Raw(stored)
+            else -> UiText.Resource(R.string.chat_error_unknown)
+        }
+    }
+
+    @get:StringRes
+    private val NetworkFailureKind.message: Int
+        get() = when (this) {
+            NetworkFailureKind.DROPPED -> R.string.chat_error_network_dropped
+            NetworkFailureKind.UNREACHABLE -> R.string.chat_error_network_unreachable
+            NetworkFailureKind.STALLED -> R.string.chat_error_network_stalled
+            NetworkFailureKind.INSECURE -> R.string.chat_error_network_insecure
+        }
 
     private fun List<ReplyPart>.mergeAdjacentWork(): List<ReplyPart> = fold(mutableListOf()) { merged, part ->
         val previous = merged.lastOrNull()
@@ -234,6 +265,9 @@ object ChatTimeline {
         return SourceUi(title, url, host)
     }
 
-    private fun parseArguments(raw: String): JsonObject =
+    internal fun parseArguments(raw: String): JsonObject =
         runCatching { json.parseToJsonElement(raw).jsonObject }.getOrDefault(JsonObject(emptyMap()))
 }
+
+fun ToolCall.toUi(status: ToolStatus): ToolCallUi =
+    ToolCallUi(id, name, ChatTimeline.parseArguments(arguments), status, result = null)

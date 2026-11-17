@@ -7,10 +7,22 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 
 @Database(
-    entities = [ChatEntity::class, MessageEntity::class, FolderEntity::class, MemoryEntity::class, ReminderEntity::class, TaskEntity::class, WatchEntity::class],
-    version = 11,
+    entities = [ChatEntity::class, MessageEntity::class, FolderEntity::class, MemoryEntity::class, ReminderEntity::class, TaskEntity::class, WatchEntity::class, RevisionEntity::class],
+    version = 12,
     exportSchema = true,
-    autoMigrations = [AutoMigration(from = 1, to = 2), AutoMigration(from = 2, to = 3), AutoMigration(from = 3, to = 4), AutoMigration(from = 4, to = 5), AutoMigration(from = 5, to = 6), AutoMigration(from = 6, to = 7), AutoMigration(from = 7, to = 8), AutoMigration(from = 8, to = 9), AutoMigration(from = 9, to = 10), AutoMigration(from = 10, to = 11)],
+    autoMigrations = [
+        AutoMigration(from = 1, to = 2),
+        AutoMigration(from = 2, to = 3),
+        AutoMigration(from = 3, to = 4),
+        AutoMigration(from = 4, to = 5),
+        AutoMigration(from = 5, to = 6),
+        AutoMigration(from = 6, to = 7),
+        AutoMigration(from = 7, to = 8),
+        AutoMigration(from = 8, to = 9),
+        AutoMigration(from = 9, to = 10),
+        AutoMigration(from = 10, to = 11),
+        AutoMigration(from = 11, to = 12, spec = MessageThreadMigration::class),
+    ],
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun chatDao(): ChatDao
@@ -20,6 +32,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun reminderDao(): ReminderDao
     abstract fun taskDao(): TaskDao
     abstract fun watchDao(): WatchDao
+    abstract fun revisionDao(): RevisionDao
 
     companion object {
         private const val FILE_NAME = "assistant.db"

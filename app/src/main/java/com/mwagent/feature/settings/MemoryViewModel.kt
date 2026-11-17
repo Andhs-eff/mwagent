@@ -2,12 +2,15 @@ package com.mwagent.feature.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.mwagent.R
 import com.mwagent.data.db.MemoryEntity
 import com.mwagent.data.db.MemoryTier
 import com.mwagent.data.memory.MemoryStore
 import com.mwagent.data.settings.EmbeddingKind
 import com.mwagent.data.settings.MemorySettings
 import com.mwagent.data.settings.SettingsRepository
+import com.mwagent.llm.ModelCatalogClient
+import com.mwagent.llm.models.ModelInfo
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -42,14 +45,17 @@ sealed interface EmbeddingProbe {
 class MemoryViewModel(
     private val settings: SettingsRepository,
     private val memories: MemoryStore,
+    private val catalog: ModelCatalogClient,
 ) : ViewModel() {
     private val draft = FormDraft<MemorySettings>(viewModelScope)
+    private val modelLoader = CatalogLoader(viewModelScope, R.string.provider_models_fetch_failed) { catalog.listModelInfo(it, withDetails = true) }
     private val _probe = MutableStateFlow<EmbeddingProbe>(EmbeddingProbe.Idle)
     private var probeJob: Job? = null
 
     val embedding: StateFlow<MemorySettings?> = draft.value
     val isDirty: StateFlow<Boolean> = draft.isDirty
     val probe: StateFlow<EmbeddingProbe> = _probe.asStateFlow()
+    val models: StateFlow<Loaded<ModelInfo>> = modelLoader.state
 
     val lists: StateFlow<MemoryLists> = memories.all
         .map { all ->
@@ -71,6 +77,11 @@ class MemoryViewModel(
     }
 
     fun selectKind(kind: EmbeddingKind) = edit { it.copy(embeddingKind = kind) }
+
+    fun loadModels(force: Boolean = false) {
+        val current = draft.current?.trimmed()?.takeIf { it.canListModels } ?: return
+        modelLoader.load(current.asEndpointProfile(), force)
+    }
 
     fun probeEmbeddings() {
         val current = draft.current?.trimmed()?.takeIf { it.embeddingsReady } ?: return

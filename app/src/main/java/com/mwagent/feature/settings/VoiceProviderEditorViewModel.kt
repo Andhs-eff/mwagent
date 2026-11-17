@@ -9,13 +9,13 @@ import com.mwagent.data.settings.ProviderProfile
 import com.mwagent.data.settings.SettingsRepository
 import com.mwagent.data.settings.VoiceProvider
 import com.mwagent.llm.ModelCatalogClient
-import com.mwagent.llm.ProviderException
 import com.mwagent.llm.SpeechVoice
 import com.mwagent.llm.VoiceListClient
+import com.mwagent.llm.models.ModelInfo
 import com.mwagent.ui.text.UiText
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
@@ -30,7 +30,6 @@ data class VoiceProviderForm(
     val speechModel: String = VoiceProvider.DEFAULT_SPEECH_MODEL,
     val speechVoice: String = VoiceProvider.DEFAULT_SPEECH_VOICE,
     val speechVoiceName: String = "",
-    val models: List<String> = emptyList(),
     val format: ApiFormat = ApiFormat.OPENAI,
 ) {
     fun withFormat(next: ApiFormat): VoiceProviderForm {
@@ -42,7 +41,6 @@ data class VoiceProviderForm(
             speechModel = speechModel.adopt(VoiceProvider.defaultSpeechModel(format), VoiceProvider.defaultSpeechModel(next)),
             speechVoice = voice,
             speechVoiceName = speechVoiceName.takeIf { voice == speechVoice }.orEmpty(),
-            models = emptyList(),
         )
     }
 
@@ -89,14 +87,11 @@ class VoiceProviderEditorViewModel(
     private val _chatProviders = MutableStateFlow<List<ProviderProfile>>(emptyList())
     val chatProviders: StateFlow<List<ProviderProfile>> = _chatProviders.asStateFlow()
 
-    private val _modelFetch = MutableStateFlow<ModelFetchState>(ModelFetchState.Idle)
-    val modelFetch: StateFlow<ModelFetchState> = _modelFetch.asStateFlow()
+    private val modelLoader = CatalogLoader(viewModelScope, R.string.provider_models_fetch_failed) { catalog.listModelInfo(it, withDetails = true) }
+    private val voiceLoader = CatalogLoader(viewModelScope, R.string.provider_voices_fetch_failed) { voiceList.list(it) }
 
-    private val _voices = MutableStateFlow<List<SpeechVoice>>(emptyList())
-    val voices: StateFlow<List<SpeechVoice>> = _voices.asStateFlow()
-
-    private val _voiceFetch = MutableStateFlow<ModelFetchState>(ModelFetchState.Idle)
-    val voiceFetch: StateFlow<ModelFetchState> = _voiceFetch.asStateFlow()
+    val models: StateFlow<Loaded<ModelInfo>> = modelLoader.state
+    val voices: StateFlow<Loaded<SpeechVoice>> = voiceLoader.state
 
     init {
         viewModelScope.launch {
@@ -123,31 +118,11 @@ class VoiceProviderEditorViewModel(
 
     fun edit(transform: (VoiceProviderForm) -> VoiceProviderForm) = draft.edit(transform)
 
-    fun fetchModels() {
-        val current = draft.current ?: return
-        _modelFetch.value = ModelFetchState.Loading
-        viewModelScope.launch {
-            _modelFetch.value = try {
-                val models = catalog.listModels(current.toProvider().asEndpointProfile())
-                edit { it.copy(models = models) }
-                ModelFetchState.Idle
-            } catch (e: ProviderException) {
-                ModelFetchState.Failed(e.message?.let(UiText::Raw) ?: UiText.Resource(R.string.provider_models_fetch_failed))
-            }
-        }
-    }
-
-    fun fetchVoices() {
-        val current = draft.current ?: return
-        _voiceFetch.value = ModelFetchState.Loading
-        viewModelScope.launch {
-            _voiceFetch.value = try {
-                _voices.value = voiceList.list(current.toProvider().asEndpointProfile())
-                ModelFetchState.Idle
-            } catch (e: ProviderException) {
-                ModelFetchState.Failed(e.message?.let(UiText::Raw) ?: UiText.Resource(R.string.provider_voices_fetch_failed))
-            }
-        }
+    fun loadCatalog(force: Boolean = false) {
+        val current = draft.current?.takeIf { it.baseUrl.isNotBlank() && it.baseUrlError == null } ?: return
+        val endpoint = current.toProvider().asEndpointProfile()
+        modelLoader.load(endpoint, force)
+        voiceLoader.load(endpoint, force)
     }
 
     fun save(onSaved: () -> Unit) {

@@ -27,7 +27,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.composables.icons.materialsymbols.MaterialSymbols
@@ -36,9 +40,10 @@ import com.mwagent.R
 import com.mwagent.data.chat.ChatLook
 import com.mwagent.ui.components.ChatBadge
 import com.mwagent.feature.main.MainNavBarClearance
+import com.mwagent.feature.main.MainTab
+import com.mwagent.feature.main.ScrollToTopOnReselect
 import com.mwagent.conversation.ChatActivity
 import com.mwagent.ui.components.WorkingBadge
-import com.mwagent.data.db.ChatSummary
 import com.mwagent.data.settings.AgentSettings
 import com.mwagent.ui.avatar.AgentLook
 import com.mwagent.ui.components.SectionHeader
@@ -46,6 +51,7 @@ import com.mwagent.ui.components.ShapeBadge
 import com.mwagent.ui.components.groupedListColors
 
 private const val PRESSED_SCALE = 0.97f
+private const val DRAFT_SEPARATOR = " "
 private val PRESS_SPEC = spring<Float>(dampingRatio = 0.6f, stiffness = 900f)
 private val FirstSectionGap = 8.dp
 private val SectionGap = 24.dp
@@ -69,6 +75,7 @@ fun ChatList(
     header: @Composable () -> Unit,
 ) {
     val listState = rememberLazyListState()
+    ScrollToTopOnReselect(MainTab.CHATS, listState)
     val scope = rememberCoroutineScope()
     val chatIds = groups.flatMap { group -> group.chats.map { it.id } }.toSet()
     val isChat by rememberUpdatedState<(Any) -> Boolean> { key -> key in chatIds }
@@ -101,24 +108,24 @@ fun ChatList(
             item(key = "header-${group.age}") {
                 SectionHeader(stringResource(group.age.label), topPadding = if (groupIndex == 0) FirstSectionGap else SectionGap)
             }
-            itemsIndexed(group.chats, key = { _, chat -> chat.id }) { index, chat ->
+            itemsIndexed(group.chats, key = { _, entry -> entry.id }) { index, entry ->
                 val shapes = ListItemDefaults.segmentedShapes(index = index, count = group.chats.size)
                 val selecting = selection.isNotEmpty()
                 SwipeableRow(
                     right = swipes.right.takeUnless { selecting },
                     left = swipes.left.takeUnless { selecting },
                     shape = shapes.shape,
-                    onAction = { onAction(it, chat.id) },
+                    onAction = { onAction(it, entry.id) },
                     modifier = Modifier.animateItem(),
                 ) {
                     ChatRow(
-                        chat = chat,
-                        activity = activity[chat.id],
-                        agentLook = AgentLook.of(agents.forChat(chat.agentId)),
-                        selected = chat.id in selection,
+                        entry = entry,
+                        activity = activity[entry.id],
+                        agentLook = AgentLook.of(agents.forChat(entry.chat.agentId)),
+                        selected = entry.id in selection,
                         shapes = shapes,
-                        onClick = { onClick(chat.id) },
-                        onLongClick = { onLongClick(chat.id) },
+                        onClick = { onClick(entry.id) },
+                        onLongClick = { onLongClick(entry.id) },
                     )
                 }
             }
@@ -128,7 +135,7 @@ fun ChatList(
 
 @Composable
 private fun ChatRow(
-    chat: ChatSummary,
+    entry: ChatEntry,
     activity: ChatActivity?,
     agentLook: AgentLook,
     selected: Boolean,
@@ -136,6 +143,8 @@ private fun ChatRow(
     onClick: () -> Unit,
     onLongClick: () -> Unit,
 ) {
+    val chat = entry.chat
+    val preview = previewOf(entry)
     val interactions = remember { MutableInteractionSource() }
     val pressed by interactions.collectIsPressedAsState()
     val scale by animateFloatAsState(if (pressed) PRESSED_SCALE else 1f, PRESS_SPEC, label = "rowPress")
@@ -154,10 +163,10 @@ private fun ChatRow(
                 else -> ChatBadge(ChatLook.of(chat.iconKey, chat.colorKey, chat.shapeKey))
             }
         },
-        supportingContent = chat.lastMessage?.let(ChatPreview::of)?.takeIf { it.isNotEmpty() }?.let { preview ->
+        supportingContent = preview?.let { shown ->
             {
                 Text(
-                    preview,
+                    shown,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -166,13 +175,27 @@ private fun ChatRow(
         },
         trailingContent = {
             Text(
-                RelativeTime.format(chat.updatedAt, LocalConfiguration.current.locales[0]),
+                RelativeTime.format(entry.sortedAt, LocalConfiguration.current.locales[0]),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         },
     ) {
         Text(chat.title, style = MaterialTheme.typography.titleMediumEmphasized, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+@Composable
+private fun previewOf(entry: ChatEntry): AnnotatedString? {
+    val draft = entry.draft
+    if (draft == null) return entry.chat.lastMessage?.let(ChatPreview::of)?.takeIf { it.isNotEmpty() }?.let(::AnnotatedString)
+    val label = stringResource(R.string.home_draft_label)
+    val content = ChatPreview.of(draft.text).ifEmpty { stringResource(R.string.home_draft_attachments, draft.attachments.size) }
+    val labelColor = MaterialTheme.colorScheme.error
+    return buildAnnotatedString {
+        withStyle(SpanStyle(color = labelColor)) { append(label) }
+        append(DRAFT_SEPARATOR)
+        append(content)
     }
 }
 

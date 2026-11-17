@@ -28,13 +28,13 @@ class DownloadMediaTool(private val downloader: MediaDownloader, private val att
         name = NAME,
         description = "Downloads a video, its sound, or the pictures of a post by link: YouTube (videos and Shorts), TikTok (videos, photo posts, sounds) " +
             "and the many other sites yt-dlp supports, such as Instagram, X, VK, Reddit, Twitch clips and SoundCloud. " +
-            "The file is saved on the phone, shown to the user in the chat, and by default also put in Downloads/MW AGENT. " +
+            "The file is saved on the phone, shown to the user in the chat, and by default also put in Downloads/MW Agent+. " +
             "Only download what the user asked for and has the right to save.",
         parameters = objectSchema(required = listOf(URL)) {
             stringProperty(URL, "Link to the video or post")
             booleanProperty(AUDIO_ONLY, "True for just the sound (music, podcasts)")
             integerProperty(MAX_HEIGHT, "Highest video quality in pixels, default $DEFAULT_HEIGHT", MIN_HEIGHT, MAX_HEIGHT_LIMIT)
-            booleanProperty(SAVE, "Also put the file in the phone's Downloads/MW AGENT folder, default true")
+            booleanProperty(SAVE, "Also put the file in the phone's Downloads/MW Agent+ folder, default true")
         },
     )
 
@@ -70,7 +70,7 @@ class DownloadMediaTool(private val downloader: MediaDownloader, private val att
         val report = buildList {
             add("Downloaded from ${media.site.ifEmpty { "the link" }}: ${media.title.ifBlank { "untitled" }}${if (media.author.isNotEmpty()) " by ${media.author}" else ""}")
             media.files.forEach { add("- ${it.absolutePath} (${ByteSize.describe(it.length())})") }
-            if (save) add("A copy is in Downloads/MW AGENT.")
+            if (save) add("A copy is in Downloads/MW Agent+.")
             if (shown.isNotEmpty()) add("Shown to the user in the chat.")
             addAll(notes)
         }.joinToString("\n")
@@ -96,7 +96,7 @@ class DownloadMediaTool(private val downloader: MediaDownloader, private val att
 class SaveToDownloadsTool(private val files: DeviceFiles, private val attachments: AttachmentStore) : Tool {
     override val spec = ToolSpec(
         name = NAME,
-        description = "Copies a file the assistant made or downloaded into the phone's public Downloads/MW AGENT folder, " +
+        description = "Copies a file the assistant made or downloaded into the phone's public Downloads/MW Agent+ folder, " +
             "where the user finds it in their file manager and gallery. Use it when the user wants to keep or save a file.",
         parameters = objectSchema(required = listOf(PATH)) {
             stringProperty(PATH, "File to save, relative paths resolve in the workspace")
@@ -110,7 +110,7 @@ class SaveToDownloadsTool(private val files: DeviceFiles, private val attachment
         files.withLocalCopy(file, settings.access.files, MAX_BYTES) { local ->
             attachments.exportToDownloads(ViewableFile(local, name, TextFormats.guessMimeType(name)))
         }
-        return ToolOutcome("Saved to Downloads/MW AGENT/$name.")
+        return ToolOutcome("Saved to Downloads/MW Agent+/$name.")
     }
 
     private fun JsonObject.optionalName(): String? =

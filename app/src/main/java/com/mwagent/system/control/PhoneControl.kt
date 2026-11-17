@@ -1,22 +1,26 @@
 package com.mwagent.system.control
 
 import android.accessibilityservice.AccessibilityService
+import android.app.KeyguardManager
 import android.content.ComponentName
 import android.content.Context
 import android.graphics.Rect
 import android.provider.Settings
 import com.mwagent.R
+import com.mwagent.assistant.AssistantPresence
 import com.mwagent.system.shell.Shell
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-class PhoneControl(private val context: Context, shell: suspend () -> Shell?) : ScriptPhone {
+class FrontScreen(val packageName: String?, val text: String)
+
+class PhoneControl(private val context: Context, private val assistant: AssistantPresence, shell: suspend () -> Shell?) : ScriptPhone {
     private val service = MutableStateFlow<AccessibilityService?>(null)
     private val screenshots = PhoneScreenshots()
-    private val reader = ScreenReader(context)
+    private val reader = ScreenReader(context, assistant)
     val session = PhoneUseSession()
-    private val executor = PhoneExecutor(context, session, reader, PhoneGestures(), InputInjector(shell))
+    private val executor = PhoneExecutor(context, session, assistant, reader, PhoneGestures(), InputInjector(shell))
 
     val connected: StateFlow<AccessibilityService?> = service.asStateFlow()
 
@@ -35,6 +39,20 @@ class PhoneControl(private val context: Context, shell: suspend () -> Shell?) : 
     }
 
     fun isReady(): Boolean = service.value != null
+
+    fun describeFrontScreen(maxChars: Int): FrontScreen? {
+        val active = service.value ?: return null
+        val snapshot = reader.snapshot(active)
+        if (snapshot.packageName == context.packageName) return null
+        return FrontScreen(snapshot.packageName, snapshot.describe().linesWithin(maxChars))
+    }
+
+    fun isLocked(): Boolean = context.getSystemService(KeyguardManager::class.java).isKeyguardLocked
+
+    suspend fun awaitCondition(condition: WaitCondition, timeoutMs: Long): WaitOutcome? {
+        val active = service.value ?: return null
+        return executor.awaitCondition(active, condition, timeoutMs)
+    }
 
     override fun begin(chatId: String) = session.begin(chatId)
 
@@ -69,6 +87,14 @@ class PhoneControl(private val context: Context, shell: suspend () -> Shell?) : 
 
     companion object {
         private const val ELEMENT_CROP_PADDING_PX = 16
-        const val NOT_CONNECTED = "Phone control is off. Ask the user to enable MW AGENT in Settings > Accessibility."
+        const val NOT_CONNECTED = "Phone control is off. Ask the user to enable MW Agent+ in Settings > Accessibility."
     }
+}
+
+private fun String.linesWithin(limit: Int): String {
+    var used = 0
+    return lineSequence().takeWhile { line ->
+        used += line.length + 1
+        used <= limit
+    }.joinToString("\n")
 }

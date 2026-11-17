@@ -16,6 +16,7 @@ import com.mwagent.data.settings.SettingsRepository
 import com.mwagent.data.settings.ShellMode
 import com.mwagent.system.control.PhoneControl
 import com.mwagent.system.files.DeviceFiles
+import com.mwagent.system.health.DeviceHealth
 import com.mwagent.system.shell.AccessStatus
 import com.mwagent.system.shell.ShellAccess
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -27,7 +28,22 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-enum class DevicePermission { ASSISTANT, MICROPHONE, NOTIFICATIONS, LOCATION, CONTACTS, CALL_LOG, PHOTOS, ALL_FILES, PHONE_CONTROL, NOTIFICATION_ACCESS, TERMUX, SHIZUKU, ROOT }
+enum class DevicePermission {
+    ASSISTANT,
+    MICROPHONE,
+    NOTIFICATIONS,
+    BACKGROUND_WORK,
+    LOCATION,
+    CONTACTS,
+    CALL_LOG,
+    PHOTOS,
+    ALL_FILES,
+    PHONE_CONTROL,
+    NOTIFICATION_ACCESS,
+    TERMUX,
+    SHIZUKU,
+    ROOT,
+}
 
 val DevicePermission.runtimePermission: String?
     get() = when (this) {
@@ -43,6 +59,7 @@ class DeviceAccessViewModel(
     private val access: ShellAccess,
     private val files: DeviceFiles,
     private val phoneControl: PhoneControl,
+    private val health: DeviceHealth,
 ) : ViewModel() {
     private val _permissions = MutableStateFlow<Map<DevicePermission, AccessStatus>>(emptyMap())
     private val _checkingRoot = MutableStateFlow(false)
@@ -62,6 +79,7 @@ class DeviceAccessViewModel(
             DevicePermission.ASSISTANT to readyIf(AssistantRole.isHeld(context)),
             DevicePermission.MICROPHONE to readyIf(isGranted(Manifest.permission.RECORD_AUDIO)),
             DevicePermission.NOTIFICATIONS to readyIf(AppNotifications.canPost(context)),
+            DevicePermission.BACKGROUND_WORK to readyIf(health.isUnrestricted()),
             DevicePermission.LOCATION to readyIf(
                 isGranted(Manifest.permission.ACCESS_FINE_LOCATION) || isGranted(Manifest.permission.ACCESS_COARSE_LOCATION),
             ),

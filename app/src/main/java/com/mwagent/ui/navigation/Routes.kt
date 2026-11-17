@@ -1,5 +1,6 @@
 package com.mwagent.ui.navigation
 
+import androidx.annotation.Keep
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -21,6 +22,12 @@ data class AgentEditorRoute(val agentId: String? = null)
 data object NetworkSettingsRoute
 
 @Serializable
+data object ModeRoute
+
+@Serializable
+data class OnboardingRoute(val retake: Boolean = false, val replay: Boolean = false)
+
+@Serializable
 data object MemorySettingsRoute
 
 @Serializable
@@ -37,6 +44,9 @@ data object TelegramRoute
 
 @Serializable
 data object AppearanceRoute
+
+@Serializable
+data object ChatSettingsRoute
 
 @Serializable
 data object ModelsRoute
@@ -60,6 +70,12 @@ data object PhoneUseRoute
 data object DeviceAccessRoute
 
 @Serializable
+data object NotificationSettingsRoute
+
+@Serializable
+data object AssistantInvokeRoute
+
+@Serializable
 data object McpServersRoute
 
 @Serializable
@@ -70,3 +86,10 @@ data class FolderRoute(val root: String, val path: String = "", val fromChats: B
 
 @Serializable
 data object MediaRoute
+
+@Keep
+@Serializable
+enum class CollectionKind { FOLDER, ARCHIVE, TRASH }
+
+@Serializable
+data class ChatCollectionRoute(val kind: CollectionKind, val folderId: String? = null)

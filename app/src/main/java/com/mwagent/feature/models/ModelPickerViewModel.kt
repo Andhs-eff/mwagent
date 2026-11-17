@@ -39,6 +39,7 @@ data class ModelPickerState(
     val rows: List<ModelRow> = emptyList(),
     val vendors: List<ModelVendor> = emptyList(),
     val totalCount: Int = 0,
+    val remembered: ModelSelection? = null,
     val isRefreshing: Boolean = false,
     val error: UiText? = null,
 )
@@ -65,6 +66,11 @@ class ModelPickerViewModel(
         .distinctUntilChanged()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), emptyList())
 
+    val showsAgents: StateFlow<Boolean> = settings.settings
+        .map { it.mode.multipleAgents }
+        .distinctUntilChanged()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), true)
+
     private val providers = settings.settings.map { it.providers }
 
     private val provider = combine(providers, providerId) { list, id -> list.firstOrNull { it.id == id } ?: list.firstOrNull() }
@@ -81,13 +87,16 @@ class ModelPickerViewModel(
 
     private val status = combine(refreshing, error) { isRefreshing, failure -> isRefreshing to failure }
 
-    val state: StateFlow<ModelPickerState> = combine(providers, provider, listing, status) { list, current, (rows, filtered), (isRefreshing, failure) ->
+    private val remembered = settings.settings.map { it.rememberedModels }.distinctUntilChanged()
+
+    val state: StateFlow<ModelPickerState> = combine(providers, provider, listing, status, remembered) { list, current, (rows, filtered), (isRefreshing, failure), lastModels ->
         ModelPickerState(
             providers = list,
             providerId = current?.id,
             rows = filtered,
             vendors = rows.mapNotNull { it.family?.vendor }.groupingBy { it }.eachCount().entries.sortedByDescending { it.value }.map { it.key },
             totalCount = rows.size,
+            remembered = current?.let { lastModels[it.id]?.selectionIn(it.id) },
             isRefreshing = isRefreshing,
             error = failure,
         )

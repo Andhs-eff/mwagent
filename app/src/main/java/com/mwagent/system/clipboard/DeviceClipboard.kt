@@ -29,6 +29,6 @@ class DeviceClipboard(private val context: Context) {
     }
 
     private companion object {
-        const val LABEL = "MW AGENT"
+        const val LABEL = "MW Agent+"
     }
 }

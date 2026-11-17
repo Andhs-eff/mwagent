@@ -2,6 +2,7 @@ package com.mwagent.ui.components
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.mwagent.ui.avatar.AgentLook
@@ -21,6 +22,7 @@ fun AgentAvatar(
     listeningLevel: Float? = null,
     knockout: KnockoutStage? = null,
     watchingBelow: Boolean = false,
+    lookAt: Offset = Offset.Zero,
 ) {
     val colors = look.tint.boldColors()
     BotAvatar(
@@ -36,5 +38,6 @@ fun AgentAvatar(
         listeningLevel = listeningLevel,
         knockout = knockout,
         watchingBelow = watchingBelow,
+        lookAt = lookAt,
     )
 }

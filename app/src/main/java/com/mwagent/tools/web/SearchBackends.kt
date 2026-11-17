@@ -16,6 +16,7 @@ import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.Request
 import java.net.URLDecoder
+import java.util.Locale
 
 @Serializable
 data class SearchHit(val title: String, val url: String, val snippet: String = "")
@@ -23,7 +24,7 @@ data class SearchHit(val title: String, val url: String, val snippet: String = "
 @Serializable
 data class SearchResults(val query: String, val results: List<SearchHit>)
 
-class WebSearcher(private val httpClients: HttpClientProvider) {
+class WebSearcher(private val httpClients: HttpClientProvider, private val locale: () -> Locale = Locale::getDefault) {
     private val json = Json { ignoreUnknownKeys = true }
 
     suspend fun search(query: String, count: Int, settings: SearchSettings): List<SearchHit> {
@@ -31,6 +32,7 @@ class WebSearcher(private val httpClients: HttpClientProvider) {
             SearchBackend.HTML_SCRAPE -> scrapeHtml(query)
             SearchBackend.SEARXNG -> searxng(query, settings)
             SearchBackend.BRAVE_API -> braveApi(query, settings)
+            SearchBackend.CUSTOM -> customApi(query, count, settings)
         }
         return hits.distinctBy { it.url }.take(count)
     }
@@ -39,7 +41,7 @@ class WebSearcher(private val httpClients: HttpClientProvider) {
         val request = Request.Builder()
             .url(HTML_SEARCH_URL)
             .header("User-Agent", BROWSER_USER_AGENT)
-            .post(FormBody.Builder().add("q", query).build())
+            .post(FormBody.Builder().add("q", query).apply { SearchLanguage.duckDuckGoRegion(locale())?.let { add("kl", it) } }.build())
             .build()
         val html = httpClients.current().fetchText(request)
         val hits = DuckDuckGoHtml.parse(html)
@@ -55,6 +57,7 @@ class WebSearcher(private val httpClients: HttpClientProvider) {
         val url = base.newBuilder().addPathSegment("search")
             .addQueryParameter("q", query)
             .addQueryParameter("format", "json")
+            .addQueryParameter("language", locale().toLanguageTag())
             .build()
         val body = httpClients.current().fetchText(Request.Builder().url(url).build())
         val results = json.parseToJsonElement(body).jsonObject["results"] as? JsonArray ?: return emptyList()
@@ -66,6 +69,7 @@ class WebSearcher(private val httpClients: HttpClientProvider) {
         val url = BRAVE_SEARCH_URL.toHttpUrl().newBuilder()
             .addQueryParameter("q", query)
             .addQueryParameter("count", MAX_API_RESULTS.toString())
+            .apply { SearchLanguage.braveLanguage(locale())?.let { addQueryParameter("search_lang", it) } }
             .build()
         val request = Request.Builder().url(url)
             .header("Accept", "application/json")
@@ -75,6 +79,12 @@ class WebSearcher(private val httpClients: HttpClientProvider) {
         val web = json.parseToJsonElement(body).jsonObject["web"] as? JsonObject ?: return emptyList()
         val results = web["results"] as? JsonArray ?: return emptyList()
         return results.mapNotNull { (it as? JsonObject)?.toHit(titleKey = "title", urlKey = "url", snippetKey = "description") }
+    }
+
+    private suspend fun customApi(query: String, count: Int, settings: SearchSettings): List<SearchHit> {
+        val request = CustomSearchApi.request(settings.custom, query, count)
+        val body = httpClients.current().fetchText(request)
+        return CustomSearchApi.hits(json.parseToJsonElement(body), settings.custom)
     }
 
     private fun JsonObject.toHit(titleKey: String, urlKey: String, snippetKey: String): SearchHit? {

@@ -128,7 +128,7 @@ class McpClient(server: McpServer, private val authorizer: McpAuthorizer?, clien
 
     private companion object {
         const val PROTOCOL_VERSION = "2025-06-18"
-        const val CLIENT_NAME = "mw-agent"
+        const val CLIENT_NAME = "mw-agent-plus"
         const val DEFAULT_IMAGE_MIME = "image/png"
         const val MAX_PAGES = 20
         val EMPTY_SCHEMA = buildJsonObject {

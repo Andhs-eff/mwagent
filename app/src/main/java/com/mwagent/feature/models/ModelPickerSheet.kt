@@ -1,6 +1,8 @@
 package com.mwagent.feature.models
 
+import com.mwagent.ui.components.AppBottomSheet
 import androidx.annotation.StringRes
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -9,6 +11,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyListState
@@ -17,11 +20,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.FilledTonalIconToggleButton
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
@@ -36,7 +39,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -44,11 +46,13 @@ import com.composables.icons.materialsymbols.MaterialSymbols
 import com.composables.icons.materialsymbols.rounded.Image
 import com.composables.icons.materialsymbols.rounded.Neurology
 import com.composables.icons.materialsymbols.rounded.Refresh
+import com.composables.icons.materialsymbols.rounded.Tune
 import com.composables.icons.materialsymbols.rounded.Visibility
 import com.mwagent.R
 import com.mwagent.data.settings.ModelSelection
 import com.mwagent.llm.models.ModelVendor
 import com.mwagent.ui.components.SearchField
+import com.mwagent.ui.components.bottomEdgeFade
 import com.mwagent.ui.components.appViewModel
 import com.mwagent.ui.text.asString
 import com.mwagent.ui.components.iconRes
@@ -70,16 +74,17 @@ fun ModelPickerSheet(
 ) {
     val viewModel = appViewModel(key = "model-picker") { ModelPickerViewModel(model?.providerId, it.settings, it.modelCatalog) }
     val agents by viewModel.agents.collectAsStateWithLifecycle()
+    val showsAgents by viewModel.showsAgents.collectAsStateWithLifecycle()
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var tab by rememberSaveable { mutableStateOf(PickerTab.MODEL) }
     val modelListState = rememberLazyListState()
 
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState, containerColor = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.clickHaptics()) {
+    AppBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState, containerColor = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.clickHaptics()) {
         Column(Modifier.fillMaxWidth().fillMaxHeight(SHEET_HEIGHT_FRACTION)) {
-            PickerTabs(tab, onSelect = { tab = it })
-            when (tab) {
+            if (showsAgents) PickerTabs(tab, onSelect = { tab = it })
+            when (if (showsAgents) tab else PickerTab.MODEL) {
                 PickerTab.MODEL -> ModelTab(viewModel, model, onSelectModel, onDismiss, modelListState)
-                PickerTab.AGENTS -> AgentList(agents, selectedId = agentId, onPick = { onSelectAgent(it.id) }, modifier = Modifier.weight(1f))
+                PickerTab.AGENTS -> AgentList(agents, selectedId = agentId, onPick = { onSelectAgent(it.id) }, modifier = Modifier.weight(1f).bottomEdgeFade(color = MaterialTheme.colorScheme.surfaceContainerLow, underNavigationBar = false))
             }
         }
     }
@@ -106,9 +111,8 @@ private fun ColumnScope.ModelTab(
     val query by viewModel.queryText.collectAsStateWithLifecycle()
     val capabilities by viewModel.activeCapabilities.collectAsStateWithLifecycle()
     val vendor by viewModel.activeVendor.collectAsStateWithLifecycle()
-    val currentHere = current?.takeIf { it.providerId == state.providerId }
+    val currentHere = current?.takeIf { it.providerId == state.providerId } ?: state.remembered
 
-    PickerHeader(state.totalCount, state.isRefreshing, viewModel::refresh)
     if (state.providers.size > 1) {
         ChipRow {
             state.providers.forEach { provider ->
@@ -120,13 +124,27 @@ private fun ColumnScope.ModelTab(
             }
         }
     }
-    SearchField(query, viewModel::search, stringResource(R.string.model_search), Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
-    ChipRow {
-        CapabilityChip(CapabilityFilter.VISION in capabilities, MaterialSymbols.Rounded.Visibility, R.string.model_filter_vision) { viewModel.toggle(CapabilityFilter.VISION) }
-        CapabilityChip(CapabilityFilter.REASONING in capabilities, MaterialSymbols.Rounded.Neurology, R.string.model_filter_reasoning) { viewModel.toggle(CapabilityFilter.REASONING) }
-        CapabilityChip(CapabilityFilter.IMAGES in capabilities, MaterialSymbols.Rounded.Image, R.string.model_filter_images) { viewModel.toggle(CapabilityFilter.IMAGES) }
-        if (state.vendors.isNotEmpty()) VerticalDivider(Modifier.padding(vertical = 8.dp).size(width = 1.dp, height = 24.dp).align(Alignment.CenterVertically))
-        state.vendors.forEach { item -> VendorChip(item, item == vendor) { viewModel.toggle(item) } }
+    var filtersOpen by rememberSaveable { mutableStateOf(false) }
+    val filtersActive = capabilities.isNotEmpty() || vendor != null
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+        SearchField(query, viewModel::search, stringResource(R.string.model_search), Modifier.weight(1f))
+        FilledTonalIconToggleButton(checked = filtersOpen || filtersActive, onCheckedChange = { filtersOpen = !filtersOpen }) {
+            Icon(MaterialSymbols.Rounded.Tune, contentDescription = stringResource(R.string.model_filters))
+        }
+        if (state.isRefreshing) {
+            LoadingIndicator(Modifier.size(48.dp))
+        } else {
+            IconButton(onClick = viewModel::refresh) { Icon(MaterialSymbols.Rounded.Refresh, contentDescription = stringResource(R.string.model_refresh)) }
+        }
+    }
+    AnimatedVisibility(filtersOpen || filtersActive) {
+        ChipRow {
+            CapabilityChip(CapabilityFilter.VISION in capabilities, MaterialSymbols.Rounded.Visibility, R.string.model_filter_vision) { viewModel.toggle(CapabilityFilter.VISION) }
+            CapabilityChip(CapabilityFilter.REASONING in capabilities, MaterialSymbols.Rounded.Neurology, R.string.model_filter_reasoning) { viewModel.toggle(CapabilityFilter.REASONING) }
+            CapabilityChip(CapabilityFilter.IMAGES in capabilities, MaterialSymbols.Rounded.Image, R.string.model_filter_images) { viewModel.toggle(CapabilityFilter.IMAGES) }
+            if (state.vendors.isNotEmpty()) VerticalDivider(Modifier.padding(vertical = 8.dp).size(width = 1.dp, height = 24.dp).align(Alignment.CenterVertically))
+            state.vendors.forEach { item -> VendorChip(item, item == vendor) { viewModel.toggle(item) } }
+        }
     }
     state.error?.let {
         Text(it.asString(), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp))
@@ -149,23 +167,23 @@ private fun ColumnScope.ModelTab(
             onSelect(viewModel.selection(row, current))
             onDismiss()
         },
-        modifier = Modifier.weight(1f),
+        modifier = Modifier.weight(1f).bottomEdgeFade(color = MaterialTheme.colorScheme.surfaceContainerLow, underNavigationBar = false),
         listState = listState,
     )
 }
 
 @Composable
-private fun PickerHeader(count: Int, isRefreshing: Boolean, onRefresh: () -> Unit) {
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(start = 24.dp, end = 12.dp)) {
+internal fun PickerHeader(label: String, isRefreshing: Boolean, onRefresh: (() -> Unit)?) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(start = 24.dp, end = 12.dp)) {
         Text(
-            pluralStringResource(R.plurals.model_picker_count, count, count),
+            label,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.weight(1f),
         )
         if (isRefreshing) {
             LoadingIndicator(Modifier.size(40.dp))
-        } else {
+        } else if (onRefresh != null) {
             IconButton(onClick = onRefresh, shapes = IconButtonDefaults.shapes()) {
                 Icon(MaterialSymbols.Rounded.Refresh, contentDescription = stringResource(R.string.model_refresh))
             }
@@ -174,7 +192,7 @@ private fun PickerHeader(count: Int, isRefreshing: Boolean, onRefresh: () -> Uni
 }
 
 @Composable
-private fun ChipRow(content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit) {
+internal fun ChipRow(content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit) {
     Row(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp),

@@ -3,8 +3,10 @@ package com.mwagent
 import android.content.Context
 import com.mwagent.data.files.ChatSentFiles
 import com.mwagent.data.files.FileLibrary
+import com.mwagent.data.files.RemovalFallback
 import com.mwagent.data.chat.SearchHistory
 import com.mwagent.ui.haptics.HapticEngine
+import com.mwagent.assistant.AssistantPresence
 import com.mwagent.assistant.ScreenContextStore
 import com.mwagent.automation.AutoRuns
 import com.mwagent.automation.Automations
@@ -56,6 +58,10 @@ import com.mwagent.tools.memory.MemoryDeleteTool
 import com.mwagent.tools.memory.MemorySaveTool
 import com.mwagent.tools.memory.MemorySearchTool
 import com.mwagent.tools.memory.MemoryUpdateTool
+import com.mwagent.data.settings.AssistantSettings
+import com.mwagent.feature.mode.ModeController
+import com.mwagent.data.settings.LockGuard
+import com.mwagent.data.settings.ShellMode
 import com.mwagent.data.settings.SecretCipher
 import com.mwagent.data.settings.SettingsRepository
 import com.mwagent.llm.ChatCompletionClient
@@ -75,6 +81,8 @@ import com.mwagent.system.control.PhoneControl
 import com.mwagent.system.control.PhoneUseSounds
 import com.mwagent.tools.phone.PhoneActionTool
 import com.mwagent.tools.phone.PhoneScreenTool
+import com.mwagent.system.lock.DeviceLock
+import com.mwagent.tools.phone.PhoneHandoffTool
 import com.mwagent.tools.phone.PhoneScreenshotTool
 import com.mwagent.tools.ShowChartTool
 import com.mwagent.tools.ShowDiagramTool
@@ -86,6 +94,9 @@ import com.mwagent.tools.skills.SkillDeleteTool
 import com.mwagent.tools.skills.SkillListTool
 import com.mwagent.tools.skills.SkillRunTool
 import com.mwagent.tools.skills.SkillSaveTool
+import com.mwagent.system.health.DeviceHealth
+import com.mwagent.system.health.NetworkWatch
+import com.mwagent.system.health.WorkKeepAlive
 import com.mwagent.system.shell.AccessStatus
 import com.mwagent.system.shell.ShellAccess
 import com.mwagent.tools.ToolRegistry
@@ -98,6 +109,7 @@ import com.mwagent.tools.reminders.SetAlarmTool
 import com.mwagent.tools.reminders.SetReminderTool
 import com.mwagent.tools.reminders.SetTimerTool
 import com.mwagent.system.files.DeviceFiles
+import com.mwagent.system.files.ShellRemoval
 import com.mwagent.system.location.DeviceLocation
 import com.mwagent.data.telegram.TelegramAccountStore
 import com.mwagent.telegram.TelegramUserApi
@@ -142,12 +154,16 @@ import com.mwagent.data.settings.VoiceSettings
 import com.mwagent.voice.ProviderSpeechSynthesizer
 import com.mwagent.voice.SpeechSynthesizer
 import com.mwagent.voice.SystemSpeechSynthesizer
+import com.mwagent.voice.VoicePreviewPlayer
 import com.mwagent.voice.VoiceRecorder
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -158,8 +174,12 @@ class AppContainer(context: Context) {
     val appContext: Context = context.applicationContext
     val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     val visibility = AppVisibility()
+    val assistant = AssistantPresence()
 
     val settings = SettingsRepository(context, SecretCipher(), applicationScope)
+    val mode = ModeController(settings)
+    val assistantSettings: StateFlow<AssistantSettings?> = settings.settings.map { it.assistant }.distinctUntilChanged()
+        .stateIn(applicationScope, SharingStarted.Eagerly, null)
     val hapticEngine = HapticEngine(appContext)
     val httpClients = HttpClientProvider(settings.networkSettings, applicationScope)
 
@@ -174,23 +194,37 @@ class AppContainer(context: Context) {
     private val embeddings = EmbeddingClient(httpClients)
     val memories = MemoryStore(database.memoryDao(), embeddings, settings.settings.map { it.tools.memory })
 
-    val completions = ChatCompletionClient(httpClients)
+    private val networkWatch = NetworkWatch(appContext)
+    val health = DeviceHealth(appContext, networkWatch, { visibility.isVisible.value }, { BackgroundWorkService.running })
+    val keepAlive = WorkKeepAlive(appContext, networkWatch, health)
+
+    val completions = ChatCompletionClient(httpClients, health.streamDiagnostics())
     val modelCatalogClient = ModelCatalogClient(httpClients)
     val voiceList = VoiceListClient(httpClients)
     val modelCatalog = ModelCatalog(modelCatalogClient, File(appContext.filesDir, MODEL_CATALOG_DIR))
     val transcriptions = TranscriptionClient(httpClients)
+    val voicePreviews = VoicePreviewPlayer(httpClients, appContext.cacheDir, applicationScope)
     val systemPrompt = SystemPromptRenderer(DeviceInfoProvider(context))
 
     val screenContext = ScreenContextStore()
     val shellAccess = ShellAccess(appContext)
     private val uploads = File(appContext.filesDir, UPLOADS_DIR)
     val deviceFiles = DeviceFiles(shellAccess.workspace, attachments.directory, File(appContext.cacheDir, FILE_STAGING_DIR), uploads)
-    val library = FileLibrary(appContext.contentResolver, uploads, shellAccess.workspace, ChatSentFiles(database.messageDao(), attachments))
+    val library = FileLibrary(
+        appContext.contentResolver,
+        uploads,
+        shellAccess.workspace,
+        ChatSentFiles(database.messageDao(), attachments),
+        removalFallback = RemovalFallback.firstOf(
+            ShellRemoval(appContext.filesDir) { shellAccess.shell(ShellMode.SANDBOX) },
+            ShellRemoval(appContext.filesDir) { shellAccess.privilegedShell(settings.current().tools.access) },
+        ),
+    )
 
     val python = PythonRuntime(appContext)
     val telegramAccounts = TelegramAccountStore(appContext, SecretCipher())
     val telegram = TelegramUserApi(python, telegramAccounts)
-    val phoneControl = PhoneControl(appContext) {
+    val phoneControl = PhoneControl(appContext, assistant) {
         when {
             shellAccess.shizuku.status() == AccessStatus.READY -> shellAccess.shizuku
             shellAccess.root.status() == AccessStatus.READY -> shellAccess.root
@@ -234,7 +268,8 @@ class AppContainer(context: Context) {
             ReadScreenTool(screenContext),
             PhoneScreenTool(phoneControl),
             PhoneScreenshotTool(phoneControl, attachments),
-            PhoneActionTool(phoneControl),
+            PhoneActionTool(phoneControl, attachments),
+            PhoneHandoffTool(phoneControl, prompts, phoneSounds, appContext),
             ShowUiTool(),
             ShowChartTool(),
             ShowDiagramTool(),
@@ -314,9 +349,11 @@ class AppContainer(context: Context) {
 
     val approvals = ToolApprovals()
 
+    val deviceLock = DeviceLock(appContext, { assistantSettings.value?.lockGuard ?: LockGuard.BIOMETRIC })
+
     val conversations = ConversationRunner(
         chats, settings, completions, systemPrompt, tools, attachments, approvals, prompts,
-        modelCatalog, GeneratedImages(attachments, httpClients), memories, applicationScope,
+        modelCatalog, GeneratedImages(attachments, httpClients), memories, applicationScope, deviceLock,
     )
 
     private val runs: AutoRuns by lazy { AutoRuns(appContext, chats, conversations, settings) }
@@ -357,7 +394,7 @@ class AppContainer(context: Context) {
     private fun ToolCall.drivesPhone(): Boolean = name in PHONE_TOOLS || (name == RunPythonTool.NAME && runCatching { RunPythonTool.usesPhone(Json.parseToJsonElement(arguments).jsonObject) }.getOrDefault(false))
 
     private companion object {
-        val PHONE_TOOLS = setOf(PhoneScreenTool.NAME, PhoneScreenshotTool.NAME, PhoneActionTool.NAME)
+        val PHONE_TOOLS = setOf(PhoneScreenTool.NAME, PhoneScreenshotTool.NAME, PhoneActionTool.NAME, PhoneHandoffTool.NAME)
         const val FILE_STAGING_DIR = "file-staging"
         const val UPLOADS_DIR = "uploads"
         const val MODEL_CATALOG_DIR = "model-catalog"

@@ -34,7 +34,7 @@ class AutoRuns(
         }
         locks.computeIfAbsent(chat.id) { Mutex() }.withLock {
             conversations.await(chat.id)
-            conversations.send(chat.id, text, emptyList(), note)
+            conversations.send(chat.id, text, emptyList(), screenNote = note, unattended = true)
             conversations.await(chat.id)
         }
         chats.history(chat.id).lastOrNull { it.role == MessageRole.ASSISTANT }?.summary()?.let { notify(title, chat.id, it) }

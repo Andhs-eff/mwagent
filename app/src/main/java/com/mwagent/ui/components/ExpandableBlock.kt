@@ -1,11 +1,5 @@
 package com.mwagent.ui.components
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -31,15 +25,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.composables.icons.materialsymbols.MaterialSymbols
 import com.composables.icons.materialsymbols.rounded.Expand_more
 import com.mwagent.R
-import com.mwagent.ui.theme.LayoutMotion
+import com.mwagent.ui.haptics.rememberHaptics
 
 @Composable
 fun ExpandableBlock(
@@ -50,18 +44,18 @@ fun ExpandableBlock(
     content: @Composable () -> Unit,
 ) {
     var expanded by rememberSaveable { mutableStateOf(initiallyExpanded) }
-    val chevronRotation by animateFloatAsState(
-        targetValue = if (expanded) HALF_TURN else 0f,
-        animationSpec = MaterialTheme.motionScheme.fastSpatialSpec(),
-        label = "chevron",
-    )
+    val haptics = rememberHaptics()
+    val reveal = animateReveal(expanded)
     val tint = MaterialTheme.colorScheme.onSurfaceVariant
 
     Column(modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier
                 .clip(MaterialTheme.shapes.small)
-                .clickable { expanded = !expanded }
+                .clickable {
+                    haptics.tick()
+                    expanded = !expanded
+                }
                 .padding(vertical = HEADER_VERTICAL_PADDING),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -79,14 +73,10 @@ fun ExpandableBlock(
                 MaterialSymbols.Rounded.Expand_more,
                 contentDescription = stringResource(if (expanded) R.string.common_collapse else R.string.common_expand),
                 tint = tint,
-                modifier = Modifier.size(CHEVRON_SIZE).rotate(chevronRotation),
+                modifier = Modifier.size(CHEVRON_SIZE).graphicsLayer { rotationZ = HALF_TURN * reveal.value },
             )
         }
-        AnimatedVisibility(
-            visible = expanded,
-            enter = expandVertically(LayoutMotion.settle()) + fadeIn(),
-            exit = shrinkVertically(LayoutMotion.settle()) + fadeOut(),
-        ) {
+        Collapsible(reveal) {
             QuoteRail(Modifier.padding(top = 4.dp, bottom = 4.dp)) { content() }
         }
     }

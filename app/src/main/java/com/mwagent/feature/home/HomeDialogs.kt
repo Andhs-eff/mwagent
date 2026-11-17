@@ -1,5 +1,6 @@
 package com.mwagent.feature.home
 
+import com.mwagent.ui.components.AppBottomSheet
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -11,7 +12,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -42,7 +42,9 @@ import com.composables.icons.materialsymbols.rounded.Folder
 import com.composables.icons.materialsymbols.rounded.Folder_off
 import com.composables.icons.materialsymbols.rounded.Create_new_folder
 import com.mwagent.R
+import com.mwagent.data.chat.look
 import com.mwagent.data.db.FolderEntity
+import com.mwagent.ui.components.icon
 import com.mwagent.ui.haptics.clickHaptics
 
 @Composable
@@ -52,7 +54,7 @@ fun TrashedChatSheet(
     onAction: (RowAction) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    ModalBottomSheet(onDismissRequest = onDismiss, modifier = Modifier.clickHaptics()) {
+    AppBottomSheet(onDismissRequest = onDismiss, modifier = Modifier.clickHaptics()) {
         Column(Modifier.navigationBarsPadding().padding(bottom = 16.dp)) {
             Text(
                 title,
@@ -69,11 +71,11 @@ fun TrashedChatSheet(
 }
 
 @Composable
-fun FolderActionsSheet(folder: FolderEntity, onRename: () -> Unit, onDelete: () -> Unit, onDismiss: () -> Unit) {
-    ModalBottomSheet(onDismissRequest = onDismiss, modifier = Modifier.clickHaptics()) {
+fun FolderActionsSheet(folder: FolderEntity, onEdit: () -> Unit, onDelete: () -> Unit, onDismiss: () -> Unit) {
+    AppBottomSheet(onDismissRequest = onDismiss, modifier = Modifier.clickHaptics()) {
         Column(Modifier.navigationBarsPadding().padding(bottom = 16.dp)) {
             Text(folder.name, style = MaterialTheme.typography.titleMediumEmphasized, modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
-            SheetAction(MaterialSymbols.Rounded.Edit, stringResource(R.string.home_folder_rename), onRename)
+            SheetAction(MaterialSymbols.Rounded.Edit, stringResource(R.string.home_folder_edit), onEdit)
             SheetAction(MaterialSymbols.Rounded.Delete, stringResource(R.string.home_folder_delete), onDelete, MaterialTheme.colorScheme.error)
             Text(
                 stringResource(R.string.home_folder_delete_body),
@@ -108,11 +110,11 @@ fun MoveToFolderSheet(
     onNewFolder: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    ModalBottomSheet(onDismissRequest = onDismiss, modifier = Modifier.clickHaptics()) {
+    AppBottomSheet(onDismissRequest = onDismiss, modifier = Modifier.clickHaptics()) {
         Column(Modifier.navigationBarsPadding().padding(bottom = 16.dp)) {
             Text(stringResource(R.string.home_move), style = MaterialTheme.typography.titleMediumEmphasized, modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
             SheetAction(MaterialSymbols.Rounded.Folder_off, stringResource(R.string.home_move_none), { onMove(null) })
-            folders.forEach { folder -> SheetAction(MaterialSymbols.Rounded.Folder, folder.name, { onMove(folder.id) }) }
+            folders.forEach { folder -> SheetAction(folder.look.icon, folder.name, { onMove(folder.id) }) }
             SheetAction(MaterialSymbols.Rounded.Create_new_folder, stringResource(R.string.home_folder_new), onNewFolder, MaterialTheme.colorScheme.primary)
         }
     }

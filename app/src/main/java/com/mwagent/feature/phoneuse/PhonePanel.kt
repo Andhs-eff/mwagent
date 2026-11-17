@@ -51,6 +51,7 @@ import androidx.compose.ui.unit.dp
 import com.composables.icons.materialsymbols.MaterialSymbols
 import com.composables.icons.materialsymbols.rounded.Expand_more
 import com.mwagent.R
+import com.mwagent.conversation.PromptAnswer
 import com.mwagent.data.settings.PhoneUseSettings
 import com.mwagent.feature.chat.ChatInput
 import com.mwagent.feature.chat.ChatItem
@@ -60,6 +61,7 @@ import com.mwagent.feature.chat.ReplyText
 import com.mwagent.feature.chat.UserMessage
 import com.mwagent.feature.chat.WorkBlock
 import com.mwagent.ui.components.AgentAvatar
+import com.mwagent.ui.haptics.rememberHaptics
 import com.mwagent.ui.text.asString
 import kotlinx.coroutines.delay
 
@@ -88,6 +90,8 @@ fun PhonePanel(
     status: String?,
     plateMaxHeight: Dp,
     actions: PanelActions,
+    help: HelpAsk? = null,
+    onHelpAnswer: (PromptAnswer) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     var input by rememberSaveable { mutableStateOf("") }
@@ -106,6 +110,7 @@ fun PhonePanel(
     }
 
     Column(modifier.graphicsLayer { alpha = dip }, verticalArrangement = Arrangement.spacedBy(PANEL_GAP)) {
+        help?.let { HelpCard(it, onHelpAnswer) }
         Surface(
             shape = MaterialTheme.shapes.extraLarge,
             color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = opacity),
@@ -141,6 +146,7 @@ fun PhonePanel(
 
 @Composable
 private fun PanelHeader(state: ChatUiState, collapsed: Boolean, status: String?, actions: PanelActions) {
+    val haptics = rememberHaptics()
     val chevron by animateFloatAsState(if (collapsed) 0f else HALF_TURN, label = "panel-chevron")
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -165,10 +171,22 @@ private fun PanelHeader(state: ChatUiState, collapsed: Boolean, status: String?,
                 modifier = Modifier.weight(1f),
             )
         }
-        IconButton(onClick = actions.onMinimize, shapes = IconButtonDefaults.shapes()) {
+        IconButton(
+            onClick = {
+                haptics.tap()
+                actions.onMinimize()
+            },
+            shapes = IconButtonDefaults.shapes(),
+        ) {
             Icon(MaterialSymbols.Rounded.Close_fullscreen, contentDescription = stringResource(R.string.phone_use_minimize))
         }
-        IconButton(onClick = actions.onToggleCollapsed, shapes = IconButtonDefaults.shapes()) {
+        IconButton(
+            onClick = {
+                haptics.tick()
+                actions.onToggleCollapsed()
+            },
+            shapes = IconButtonDefaults.shapes(),
+        ) {
             Icon(
                 MaterialSymbols.Rounded.Expand_more,
                 contentDescription = stringResource(if (collapsed) R.string.phone_use_expand else R.string.phone_use_collapse),
@@ -198,6 +216,13 @@ private fun PlateLog(state: ChatUiState, modifier: Modifier) {
                             is ReplyPart.Media, is ReplyPart.Chart, is ReplyPart.Diagram -> Unit
                         }
                     }
+                    item.retry?.let { retry ->
+                        Text(
+                            stringResource(R.string.chat_retry_now, retry.attempt, retry.limit),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
                 }
             }
         }
@@ -206,13 +231,21 @@ private fun PlateLog(state: ChatUiState, modifier: Modifier) {
 
 @Composable
 fun PhoneBubble(isWorking: Boolean, actions: BubbleActions, modifier: Modifier = Modifier) {
+    val haptics = rememberHaptics()
     Surface(
         shape = CircleShape,
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
         shadowElevation = BUBBLE_ELEVATION,
         modifier = modifier
             .size(BUBBLE_SIZE)
-            .windowDrag(actions.onDrag, actions.onDragEnd, onTap = actions.onOpen),
+            .windowDrag(
+                actions.onDrag,
+                actions.onDragEnd,
+                onTap = {
+                    haptics.tap()
+                    actions.onOpen()
+                },
+            ),
     ) {
         Box(contentAlignment = Alignment.Center) {
             if (isWorking) {

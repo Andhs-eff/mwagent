@@ -33,6 +33,7 @@ import com.mwagent.feature.chat.ApprovalCard
 import com.mwagent.feature.chat.PromptCard
 import com.mwagent.feature.chat.PromptPanel
 import com.mwagent.feature.chat.ToolCallUi
+import com.mwagent.ui.haptics.clickHaptics
 
 sealed interface ModalRequest {
     data class Prompt(val pending: PendingPrompt) : ModalRequest
@@ -57,7 +58,7 @@ fun PhoneModal(request: ModalRequest, actions: ModalActions) {
             .pointerInput(Unit) { detectTapGestures { } }
             .padding(MODAL_MARGIN),
     ) {
-        val card = Modifier.widthIn(max = MODAL_MAX_WIDTH)
+        val card = Modifier.widthIn(max = MODAL_MAX_WIDTH).clickHaptics()
         when (request) {
             is ModalRequest.Prompt -> WithStopAgent(actions, card) {
                 PromptPanel(request.pending, onAnswer = { actions.onAnswer(request.pending, it) }, modifier = Modifier.fillMaxWidth())

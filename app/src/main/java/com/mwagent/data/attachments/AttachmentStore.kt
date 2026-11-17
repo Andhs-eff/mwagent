@@ -33,6 +33,7 @@ data class Attachment(
     val mimeType: String,
     val sizeBytes: Long,
     val forModel: Boolean = true,
+    val caption: String? = null,
 ) {
     val isImage: Boolean get() = mimeType.startsWith("image/")
 
@@ -72,9 +73,12 @@ class AttachmentStore(private val context: Context) {
         }
     }
 
-    suspend fun importLocal(source: File, forModel: Boolean): Attachment = withContext(Dispatchers.IO) {
-        val name = source.name
-        val mimeType = TextFormats.guessMimeType(name)
+    suspend fun importLocal(
+        source: File,
+        forModel: Boolean,
+        name: String = source.name,
+        mimeType: String = TextFormats.guessMimeType(name),
+    ): Attachment = withContext(Dispatchers.IO) {
         if (forModel && mimeType.startsWith("image/")) {
             storeImageForModel(name) { ImageDecoder.createSource(source) }
         } else {
@@ -195,7 +199,7 @@ class AttachmentStore(private val context: Context) {
 
     private companion object {
         const val DIRECTORY = "attachments"
-        const val DOWNLOADS_FOLDER = "MW AGENT"
+        const val DOWNLOADS_FOLDER = "MW Agent+"
         const val FALLBACK_NAME = "file"
         const val STORED_IMAGE_MIME = "image/jpeg"
         const val JPEG_EXTENSION = "jpg"

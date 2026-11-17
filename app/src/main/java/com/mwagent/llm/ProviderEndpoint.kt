@@ -2,6 +2,7 @@ package com.mwagent.llm
 
 import com.mwagent.data.settings.ApiFormat
 import com.mwagent.data.settings.ProviderProfile
+import com.mwagent.net.NetworkFailureKind
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.Request
@@ -45,6 +46,6 @@ class ProviderEndpoint(private val provider: ProviderProfile) {
 sealed class ProviderException(message: String, cause: Throwable? = null) : Exception(message, cause) {
     class InvalidConfiguration(message: String) : ProviderException(message)
     class Http(val code: Int, message: String) : ProviderException(message)
-    class Network(cause: Throwable) : ProviderException(cause.message ?: "Network error", cause)
+    class Network(cause: Throwable, val kind: NetworkFailureKind = NetworkFailureKind.of(cause)) : ProviderException(cause.message ?: "Network error", cause)
     class MalformedResponse(message: String) : ProviderException(message)
 }

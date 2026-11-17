@@ -18,13 +18,17 @@ android {
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "com.mwagent"
+        applicationId = "io.github.andhseff.mwagent"
         minSdk = 29
         targetSdk = 36
-        versionCode = 23
-        versionName = "0.13.0"
+        versionCode = 24
+        versionName = "0.14.0"
 
         ndk { abiFilters += "arm64-v8a" }
+    }
+
+    lint {
+        disable += "MissingTranslation"
     }
 
     signingConfigs {

@@ -12,6 +12,7 @@ import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -35,6 +36,7 @@ import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
@@ -74,6 +76,7 @@ import com.composables.icons.materialsymbols.rounded.Mic
 import com.composables.icons.materialsymbols.roundedfilled.Stop
 import com.mwagent.R
 import com.mwagent.data.attachments.Attachment
+import com.mwagent.ui.haptics.clickHaptics
 import com.mwagent.ui.haptics.rememberHaptics
 import com.mwagent.voice.DictationState
 
@@ -94,6 +97,8 @@ fun ChatInput(
     attachments: List<Attachment> = emptyList(),
     isImporting: Boolean = false,
     onAttach: (() -> Unit)? = null,
+    attachIcon: ImageVector = MaterialSymbols.Rounded.Attach_file,
+    attachMenu: (@Composable ColumnScope.(close: () -> Unit) -> Unit)? = null,
     onRemoveAttachment: (Attachment) -> Unit = {},
     onPasteImages: ((List<Uri>) -> Unit)? = null,
     dictation: DictationControls? = null,
@@ -116,9 +121,25 @@ fun ChatInput(
     if (settledAt != wrappedAt) wrappedAt = settledAt
     val stacked = ComposerStacking.isStacked(settledAt, text) && !isDictating
     var sentText by remember { mutableStateOf<String?>(null) }
-    val leading: (() -> Unit)? = if (isDictating) dictation?.onCancel else onAttach
+    var attachOpen by remember { mutableStateOf(false) }
+    val leading: (() -> Unit)? = when {
+        isDictating -> dictation?.onCancel
+        attachMenu != null -> ({ attachOpen = true })
+        else -> onAttach
+    }
 
-    val leadingButton = @Composable { leading?.let { LeadingButton(isDictating, it) } }
+    val leadingButton = @Composable {
+        leading?.let { click ->
+            Box {
+                LeadingButton(isDictating, attachIcon, click)
+                if (attachMenu != null) {
+                    DropdownMenu(expanded = attachOpen && !isDictating, onDismissRequest = { attachOpen = false }, modifier = Modifier.clickHaptics()) {
+                        attachMenu { attachOpen = false }
+                    }
+                }
+            }
+        }
+    }
     val actionButton = @Composable {
         if (steering) {
             StopButton(onClick = { haptics.confirm(); onStop() })
@@ -222,12 +243,12 @@ private fun StopButton(onClick: () -> Unit) {
 }
 
 @Composable
-private fun LeadingButton(isDictating: Boolean, onClick: () -> Unit) {
+private fun LeadingButton(isDictating: Boolean, attachIcon: ImageVector, onClick: () -> Unit) {
     IconButton(onClick = onClick, shapes = IconButtonDefaults.shapes()) {
         if (isDictating) {
             Icon(MaterialSymbols.Rounded.Close, contentDescription = stringResource(R.string.dictation_cancel))
         } else {
-            Icon(MaterialSymbols.Rounded.Attach_file, contentDescription = stringResource(R.string.chat_attach_file))
+            Icon(attachIcon, contentDescription = stringResource(R.string.chat_attach_file))
         }
     }
 }

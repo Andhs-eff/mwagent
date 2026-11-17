@@ -70,6 +70,7 @@ import com.composables.icons.materialsymbols.rounded.Forum
 import com.composables.icons.materialsymbols.rounded.Article
 import com.composables.icons.materialsymbols.rounded.File_save
 import com.composables.icons.materialsymbols.rounded.Phone_android
+import com.composables.icons.materialsymbols.rounded.Front_hand
 import com.composables.icons.materialsymbols.rounded.Touch_app
 import com.mwagent.R
 import com.mwagent.mcp.McpTool
@@ -139,6 +140,7 @@ import com.mwagent.tools.reminders.SetReminderTool
 import com.mwagent.tools.reminders.SetTimerTool
 import com.mwagent.tools.phone.PhoneActionTool
 import com.mwagent.tools.phone.PhoneScreenTool
+import com.mwagent.tools.phone.PhoneHandoffTool
 import com.mwagent.tools.phone.PhoneScreenshotTool
 import com.mwagent.tools.system.RunCommandTool
 import com.mwagent.tools.system.RunPythonTool
@@ -162,9 +164,17 @@ enum class ToolCategory(@StringRes val title: Int) {
     AUTOMATION(R.string.tools_category_automation),
     SYSTEM(R.string.tools_category_system),
     SKILLS(R.string.tools_category_skills),
-    MCP(R.string.tools_category_mcp),
     OTHER(R.string.tools_category_other),
+    MCP(R.string.tools_category_mcp),
 }
+
+enum class ToolGroup(@StringRes val title: Int) {
+    BUILT_IN(R.string.tools_group_builtin),
+    MCP(R.string.tools_group_mcp),
+}
+
+val ToolCategory.group: ToolGroup
+    get() = if (this == ToolCategory.MCP) ToolGroup.MCP else ToolGroup.BUILT_IN
 
 data class ToolInfo(val icon: ImageVector, val title: UiText, val summary: UiText, val category: ToolCategory)
 
@@ -201,6 +211,7 @@ object ToolCatalog {
         TelegramSendTool.NAME to known(ToolCategory.TELEGRAM, MaterialSymbols.Rounded.Send, R.string.tools_telegram_send_title, R.string.tools_telegram_send_summary),
         LocationTool.NAME to known(ToolCategory.PHONE, MaterialSymbols.Rounded.Location_on, R.string.tools_location_title, R.string.tools_location_summary),
         PhoneActionTool.NAME to known(ToolCategory.PHONE, MaterialSymbols.Rounded.Touch_app, R.string.tools_phone_action_title, R.string.tools_phone_action_summary),
+        PhoneHandoffTool.NAME to known(ToolCategory.PHONE, MaterialSymbols.Rounded.Front_hand, R.string.tools_phone_handoff_title, R.string.tools_phone_handoff_summary),
         RunCommandTool.NAME to known(ToolCategory.SYSTEM, MaterialSymbols.Rounded.Terminal, R.string.tools_run_command_title, R.string.tools_run_command_summary),
         RunPythonTool.NAME to known(ToolCategory.SYSTEM, MaterialSymbols.Rounded.Code, R.string.tools_run_python_title, R.string.tools_run_python_summary),
         DeviceStatusTool.NAME to known(ToolCategory.DEVICE, MaterialSymbols.Rounded.Battery_android_full, R.string.tools_device_status_title, R.string.tools_device_status_summary),

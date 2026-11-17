@@ -4,7 +4,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.mwagent.conversation.ChatActivity
 import com.mwagent.conversation.ConversationRunner
+import com.mwagent.data.chat.ChatDraft
 import com.mwagent.data.chat.ChatRepository
+import com.mwagent.data.chat.FolderLook
 import com.mwagent.data.db.ChatSummary
 import com.mwagent.data.settings.AgentSettings
 import com.mwagent.data.db.FolderEntity
@@ -28,7 +30,12 @@ import java.time.ZoneId
 
 enum class ChatAge { TODAY, YESTERDAY, THIS_WEEK, EARLIER }
 
-data class ChatGroup(val age: ChatAge, val chats: List<ChatSummary>)
+data class ChatEntry(val chat: ChatSummary, val draft: ChatDraft?) {
+    val id: String get() = chat.id
+    val sortedAt: Long get() = maxOf(chat.updatedAt, draft?.savedAt ?: 0L)
+}
+
+data class ChatGroup(val age: ChatAge, val chats: List<ChatEntry>)
 
 sealed interface ChatFilter {
     data object All : ChatFilter
@@ -48,8 +55,6 @@ data class HomeUiState(
     val groups: List<ChatGroup> = emptyList(),
     val folders: List<FolderEntity> = emptyList(),
     val filter: ChatFilter = ChatFilter.All,
-    val hasArchive: Boolean = false,
-    val hasTrash: Boolean = false,
     val swipeRight: SwipeAction = SwipeAction.TRASH,
     val swipeLeft: SwipeAction = SwipeAction.ARCHIVE,
     val selection: Set<String> = emptySet(),
@@ -70,15 +75,18 @@ class HomeViewModel(
     private val chats: ChatRepository,
     private val settings: SettingsRepository,
     runner: ConversationRunner,
+    initialFilter: ChatFilter = ChatFilter.All,
     private val zone: () -> ZoneId = ZoneId::systemDefault,
 ) : ViewModel() {
-    private val filter = MutableStateFlow<ChatFilter>(ChatFilter.All)
+    private val filter = MutableStateFlow(initialFilter)
     private val _notices = Channel<HomeNotice>(Channel.BUFFERED)
     private var rangeBase: Set<String>? = null
 
     val notices: Flow<HomeNotice> = _notices.receiveAsFlow()
     private val selection = MutableStateFlow<Set<String>>(emptySet())
-    private val summaries = chats.observeSummaries()
+    private val entries = combine(chats.observeSummaries(), chats.observeDrafts()) { summaries, drafts ->
+        summaries.map { ChatEntry(it, drafts[it.id]) }.sortedByDescending(ChatEntry::sortedAt)
+    }
 
     private val filters = combine(filter, selection, ::Filters)
 
@@ -95,20 +103,18 @@ class HomeViewModel(
     }
 
     val state: StateFlow<HomeUiState> = combine(
-        summaries,
+        entries,
         chats.observeFolders(),
         filters,
         settings.settings,
         runner.activity,
     ) { all, folders, filters, current, activity ->
         val shown = filters.filter.takeUnless { it is ChatFilter.Folder && folders.none { folder -> folder.id == it.id } } ?: ChatFilter.All
-        val visible = all.filter { chat -> chat.belongsTo(shown) }
+        val visible = all.filter { entry -> entry.chat.belongsTo(shown) }
         HomeUiState(
             groups = group(visible),
             folders = folders,
             filter = shown,
-            hasArchive = all.any { it.archivedAt != null && it.trashedAt == null },
-            hasTrash = all.any { it.trashedAt != null },
             swipeRight = current.ui.swipeRight,
             swipeLeft = current.ui.swipeLeft,
             selection = filters.selection.intersect(visible.map { it.id }.toSet()),
@@ -182,18 +188,18 @@ class HomeViewModel(
         viewModelScope.launch { chats.moveToFolder(chatIds, folderId) }
     }
 
-    fun createFolder(name: String, moving: Set<String> = emptySet()) {
+    fun createFolder(name: String, look: FolderLook, moving: Set<String> = emptySet()) {
         if (name.isBlank()) return
         selection.update { emptySet() }
         viewModelScope.launch {
-            val folder = chats.createFolder(name)
+            val folder = chats.createFolder(name, look)
             if (moving.isNotEmpty()) chats.moveToFolder(moving, folder.id)
         }
     }
 
-    fun renameFolder(folderId: String, name: String) {
+    fun updateFolder(folderId: String, name: String, look: FolderLook) {
         if (name.isBlank()) return
-        viewModelScope.launch { chats.renameFolder(folderId, name) }
+        viewModelScope.launch { chats.updateFolder(folderId, name, look) }
     }
 
     fun deleteFolder(folderId: String) {
@@ -208,10 +214,10 @@ class HomeViewModel(
         ChatFilter.Trash -> trashedAt != null
     }
 
-    private fun group(summaries: List<ChatSummary>): List<ChatGroup> {
+    private fun group(entries: List<ChatEntry>): List<ChatGroup> {
         val today = LocalDate.now(zone())
-        return summaries
-            .groupBy { ageOf(it.updatedAt, today) }
+        return entries
+            .groupBy { ageOf(it.sortedAt, today) }
             .toSortedMap()
             .map { (age, items) -> ChatGroup(age, items) }
     }
