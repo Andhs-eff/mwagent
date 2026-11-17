@@ -1,13 +1,13 @@
 <p align="center">
-  <img src="docs/header.png" alt="MW AGENT" width="100%">
+  <img src="docs/header.png" alt="MW Agent+" width="100%">
 </p>
 
-<h3 align="center">MW AGENT: an AI agent that lives on your phone and actually does things</h3>
+<h3 align="center">MW Agent+: an AI agent that lives on your phone and actually does things</h3>
 
 <p align="center">
-  Any model, your own key. It reads the screen, taps through apps, runs Python,<br>
-  downloads videos, works with your Telegram, acts on its own on a schedule<br>
-  or when a message arrives, and writes new skills for itself.
+  Any model, your own key. Summon it over any app, let it read the screen and tap through flows,<br>
+  branch chats and roll back file edits, run Python, download videos, work with your Telegram,<br>
+  act on its own on a schedule or when a message arrives, and grow new skills for itself.
 </p>
 
 <p align="center">
@@ -96,7 +96,7 @@
 ## 🔄 How it works
 
 <p align="center">
-  <img src="docs/how-it-works.svg" width="100%" alt="You ask MW AGENT, it sends the chat and the tool list to your model, the model calls tools, the app runs them on the phone: screen and apps, Telegram, Python and skills, web and video. Risky steps wait for Allow or Deny.">
+  <img src="docs/how-it-works.svg" width="100%" alt="You ask MW Agent+, it sends the chat and the tool list to your model, the model calls tools, the app runs them on the phone: screen and apps, Telegram, Python and skills, web and video. Risky steps wait for Allow or Deny.">
 </p>
 
 The app is only a client. It sends your message to the model you chose, the model picks tools, and the app runs them on the phone. Anything risky waits for your tap.
@@ -106,7 +106,7 @@ The app is only a client. It sends your message to the model you chose, the mode
 | You say | What happens |
 |---|---|
 | *"How's my phone doing?"* | Battery, temperature, network and free space in one answer |
-| *"Download this TikTok and the sound from this YouTube video"* | Both files in the chat and in Downloads/MW AGENT |
+| *"Download this TikTok and the sound from this YouTube video"* | Both files in the chat and in Downloads/MW Agent+ |
 | *"Find the invoice messages in my Telegram and send the PDF to Anna"* | A search, then a file with a caption, after you approve |
 | *"Where am I? Walking route to the nearest pharmacy"* | GPS, a web search, then maps open with the route |
 | *"How much is 250 euros in rubles?"* | Today's rate and the amount |
@@ -155,7 +155,7 @@ The app is only a client. It sends your message to the model you chose, the mode
 - **YouTube** videos and Shorts up to 1080p. Video and sound arrive separately and are joined on the phone with Android's own muxer, no ffmpeg needed.
 - **TikTok** videos, photo posts and sounds.
 - **Everything else yt-dlp supports**: Instagram, X, VK, Reddit, Twitch clips, SoundCloud and more than a thousand other sites.
-- Sound only on request. Files are shown in the chat and saved to Downloads/MW AGENT.
+- Sound only on request. Files are shown in the chat and saved to Downloads/MW Agent+.
 
 </details>
 
@@ -204,12 +204,13 @@ The app is only a client. It sends your message to the model you chose, the mode
 <summary><b>📱 Phone and device</b></summary>
 <br>
 
-- Phone control through an accessibility service: the screen as numbered elements, screenshots, taps, typing, swipes, system keys and opening apps. It never acts on MW AGENT's own screen.
+- Phone control through an accessibility service: the screen as numbered elements, screenshots, taps, typing, swipes, system keys, opening apps and pausing to hand the screen back to you (`phone_handoff`) for sign-ins, CAPTCHAs or 2FA. It never acts on MW Agent+'s own screen.
 - Python 3.13 on the phone (Chaquopy) with a `phone` module for long flows and saved routines.
-- Shell in a sandbox (default), Termux, Shizuku or root.
+- Shell in a sandbox (default), Termux, Shizuku or root, with shell-assisted fallback deletion for stubborn workspace files.
+- Biometric / screen-lock protection: private and write tools require unlocking the phone when triggered from the lock screen, while your own scheduled tasks and watches continue unattended.
 - Device status, flashlight, volume, clipboard, QR codes and exchange rates.
-- Notifications from other apps, readable once you allow notification access.
-- A Quick Settings tile and a home screen widget start a new chat or a voice question in one tap.
+- Notifications from other apps, readable once you allow notification access, plus live progress notifications for background agent work.
+- Four Quick Settings tiles (Ask by voice, New chat, Files, Settings) and a home screen widget for one-tap access.
 - Calendar, dialer, SMS, email, maps and the share sheet open filled in, and you finish there.
 - Location from GPS or the network with the nearest address.
 - Files limited to the app folder by default, or phone storage with All files access, or root.
@@ -220,12 +221,16 @@ The app is only a client. It sends your message to the model you chose, the mode
 <summary><b>💬 Chats and agents</b></summary>
 <br>
 
-- Folders, archive, a 30-day trash, swipe actions and multi-select.
+- Conversation branching: edit any earlier message or regenerate a reply to explore a new branch, and switch between versions (`< 1 / 2 >`) without losing prior turns.
+- File change snapshots and rollback: workspace files edited by tools are snapshotted with line diffs so you can inspect changes or roll them back in one tap.
+- Live context window meter in the chat header with a token breakdown across system prompt, memories, tools, attachments and messages.
+- Slide-out chat drawer inside any chat, plus folders (with custom icons and colors), archive, a 30-day trash, swipe actions and multi-select.
 - Search across titles and messages with highlighted snippets.
 - Each chat gets a title, icon, color and shape after the first reply.
-- Replies keep streaming in the background with a Stop button in the notification.
-- Markdown with highlighted code, LaTeX, charts and diagrams, quick-reply chips and source pills.
-- As many agents as you like, each with its own prompt, animated avatar, tool permissions and voice. Prompts accept `{agent_name}`, `{date}`, `{time}`, `{weekday}`, `{timezone}`, `{device}`, `{android}`, `{battery}` and `{locale}`.
+- Replies keep streaming in the background with live tool progress and a Stop button in the notification.
+- Markdown with highlighted code, callout blocks, auto-sized tables, LaTeX, charts and diagrams, quick-reply chips and source pills.
+- Three app modes (**Simple**, **Code**, **Everything**) to keep the toolset focused or unlock every capability at once, plus an interactive onboarding tour and searchable Settings.
+- As many agents as you like, each with its own prompt, animated physics avatar, tool permissions and voice. Prompts accept `{agent_name}`, `{date}`, `{time}`, `{weekday}`, `{timezone}`, `{device}`, `{android}`, `{battery}` and `{locale}`.
 
 <p align="center">
   <img src="docs/screenshots/agents.png" width="24%" alt="The agent list">
@@ -241,25 +246,25 @@ The app is only a client. It sends your message to the model you chose, the mode
 <br>
 
 - Two-tier memory: instant memories always in the prompt, long-term ones searched by keyword or embeddings.
-- Dictation through OpenAI-format, Gemini or ElevenLabs transcription. Replies read aloud with the system voice or a provider voice.
-- Set MW AGENT as the default assistant to open it over any app with a gesture. It can read the app underneath.
+- Dictation through OpenAI-format, Gemini or ElevenLabs transcription. Replies read aloud with the system voice or a provider voice, with voice previews in Settings.
+- Set MW Agent+ as the default assistant to summon it over any app with an animated Edge Glow shader, attach files or photos directly in the overlay, and read the app underneath.
 - Remote [MCP](https://modelcontextprotocol.io) servers over Streamable HTTP with a token or OAuth. Server tools appear as `mcp_<server>_<tool>`.
-- Material 3 Expressive, dynamic color, dark theme, English and Russian, optional DNS over HTTPS.
+- Material 3 Expressive, dynamic color, dark theme, predictive slide-back navigation, 8 UI languages (English, Deutsch, Español, Bahasa Indonesia, Português, Русский, Türkçe, Tiếng Việt) and optional DNS over HTTPS.
 
 </details>
 
 ## 🧰 Tools
 
-**71 built-in tools** plus any MCP server. Each one is **Off**, **Ask** or **Auto**, globally and per agent. An Ask tool pauses the reply with a card: Allow, Deny, or Always allow in this session.
+**72 built-in tools** plus any MCP server. Each one is **Off**, **Ask** or **Auto**, globally and per agent. An Ask tool pauses the reply with a card: Allow, Deny, or Always allow in this session.
 
 <details>
-<summary><b>Show all 71 tools</b></summary>
+<summary><b>Show all 72 tools</b></summary>
 <br>
 
 #### 🌐 Web and world
 | Tool | What it does | Default |
 |---|---|---|
-| `web_search` | DuckDuckGo (default), SearXNG or Brave | Auto |
+| `web_search` | DuckDuckGo (default), SearXNG, Brave or any custom JSON search API (with an Exa preset) | Auto |
 | `read_webpage` | A page as clean text | Auto |
 | `get_weather` | Weather and a 1 to 7 day forecast from Open-Meteo | Auto |
 | `get_location` | GPS or network position with the nearest address | Ask |
@@ -282,6 +287,7 @@ The app is only a client. It sends your message to the model you chose, the mode
 | `phone_screen` | The live screen as numbered elements | Auto |
 | `phone_screenshot` | A screenshot the model can look at | Auto |
 | `phone_action` | Tap, type, scroll, swipe, keys, open apps | Ask |
+| `phone_handoff` | Pause phone control and ask you to finish a step (login, CAPTCHA, 2FA) | Auto |
 
 #### 🔦 Device
 | Tool | What it does | Default |
@@ -324,7 +330,7 @@ The app is only a client. It sends your message to the model you chose, the mode
 | `list_files`, `read_file` | Browse and read files in the allowed scope | Auto |
 | `write_file` | Write or append text | Ask |
 | `send_files` | Show files and images in the chat | Auto |
-| `save_to_downloads` | Put a file in Downloads/MW AGENT | Auto |
+| `save_to_downloads` | Put a file in Downloads/MW Agent+ | Auto |
 | `search_local` | Search by meaning through your files and chats | Auto |
 | `find_photos` | Gallery previews by date, album or name | Ask |
 | `get_photo` | One gallery photo in full size | Ask |
@@ -394,7 +400,7 @@ fdc3fc65ecd9a809c195797bbc311489ab1a58f0ca1a7701df0d73d2dc5512d9
 <summary><b>Play Protect says "App blocked to protect your device"</b></summary>
 <br>
 
-Play Protect blocks sideloaded apps that declare an accessibility service, because such permissions are often abused. MW AGENT declares one for phone control. The service does nothing until you switch it on, and the block is a blanket rule, not a finding about this app. The code is all here and the release can be checked against the fingerprint above.
+Play Protect blocks sideloaded apps that declare an accessibility service, because such permissions are often abused. MW Agent+ declares one for phone control. The service does nothing until you switch it on, and the block is a blanket rule, not a finding about this app. The code is all here and the release can be checked against the fingerprint above.
 
 To install anyway: Google Play → profile picture → Play Protect → gear → switch off **Scan apps with Play Protect**, then open the APK again. Whether to turn scanning back on is your call; if you only pause it, Play Protect may remove the app when it resumes.
 
@@ -404,7 +410,7 @@ To install anyway: Google Play → profile picture → Play Protect → gear →
 <summary><b>The accessibility switch is greyed out</b></summary>
 <br>
 
-Android restricts accessibility for apps installed outside a store. Open App info for MW AGENT, tap ⋮, choose **Allow restricted settings**, then switch the service on.
+Android restricts accessibility for apps installed outside a store. Open App info for MW Agent+, tap ⋮, choose **Allow restricted settings**, then switch the service on.
 
 </details>
 
@@ -420,7 +426,7 @@ Link it in **Settings → Telegram** with an API ID and hash from my.telegram.or
 <summary><b>Calendar, dialer, SMS, maps or sharing did not open</b></summary>
 <br>
 
-Android only lets an app open other apps while it is on screen. Keep MW AGENT open while the agent does it.
+Android only lets an app open other apps while it is on screen. Keep MW Agent+ open while the agent does it.
 
 </details>
 
@@ -428,7 +434,7 @@ Android only lets an app open other apps while it is on screen. Keep MW AGENT op
 <summary><b>A video did not download</b></summary>
 <br>
 
-The video may be private, age-restricted, region-locked or larger than the limit. Sites also change often; a newer MW AGENT release usually brings an updated downloader.
+The video may be private, age-restricted, region-locked or larger than the limit. Sites also change often; a newer MW Agent+ release usually brings an updated downloader.
 
 </details>
 
@@ -439,20 +445,33 @@ The video may be private, age-restricted, region-locked or larger than the limit
 | 🚫 **Nothing goes to us** | No analytics, no crash reports, no accounts, cloud backup off. |
 | 🗝️ **Local and encrypted** | Chats sit in a local database. Provider keys, tool settings and the Telegram session are encrypted with an Android Keystore key. |
 | ➡️ **Direct traffic only** | Messages go to the provider you set up, Telegram traffic only to Telegram, downloads only to the site of the link. Defaults that use public services, each replaceable in Settings: DuckDuckGo, r.jina.ai and Open-Meteo. Exchange rates come from open.er-api.com. The update check calls GitHub when you tap it. |
-| ✋ **You approve the risky parts** | Sending, reading private data, running code and changing settings ask first by default. Calls, SMS, emails and calendar events are only prepared; you finish them yourself. |
-| 📋 **Permissions** | Internet and network state, vibration, microphone (dictation), notifications, exact alarms and boot (reminders and tasks), location, contacts, call history and photos (each only after you grant it) and a foreground service (background replies and watches). Termux, All files access, notification access and the accessibility service stay off until you enable them. No camera permission. |
+| ✋ **You approve the risky parts** | Sending, reading private data, running code and changing settings ask first by default, and sensitive tools ask to unlock the phone if triggered while locked. Calls, SMS, emails and calendar events are only prepared; you finish them yourself. |
+| 📋 **Permissions** | Internet and network state, vibration, biometric/device unlock, microphone (dictation), notifications, exact alarms and boot (reminders and tasks), location, contacts, call history and photos (each only after you grant it) and a foreground service (background replies and watches). Termux, All files access, notification access and the accessibility service stay off until you enable them. No camera permission. |
+
+## 🛠️ Build from source
+
+```bash
+git clone https://github.com/Andhs-eff/mwagent.git
+cd mwagent
+python -I -m unittest discover -s app/src/test/python
+./gradlew testDebugUnitTest assembleDebug
+```
+
+Needs JDK 17 and Android SDK Platform 37 (`sdk.dir` in `local.properties` or `ANDROID_HOME`). For a signed R8-optimized release APK (`app/build/outputs/apk/release/app-release.apk`), add gitignored `keystore/keystore.properties` (`storeFile`, `storePassword`, `keyAlias`, `keyPassword`) and run `./gradlew assembleRelease`.
 
 ## 🇷🇺 По-русски
 
-**MW AGENT** — ИИ-агент для Android, который не просто отвечает, а делает: читает экран и нажимает кнопки в приложениях, запускает Python, качает видео, работает с твоим Telegram и сам пишет себе новые навыки, когда готового инструмента нет.
+**MW Agent+** — ИИ-агент для Android, объединяющий возможности MW AGENT и MD3 Agent: читает экран и нажимает кнопки в приложениях (с передачей управления тебе на шагах входа/2FA), ветвит диалоги и откатывает правки файлов, запускает Python, качает видео, работает с твоим Telegram и сам пишет себе новые навыки.
 
-- 🧠 Любая модель через свой ключ: OpenAI-совместимые, Claude, Gemini, OpenRouter, Ollama, LM Studio.
+- 🧠 Любая модель через свой ключ: OpenAI-совместимые, Claude, Gemini, OpenRouter, Ollama, LM Studio; счётчик контекста прямо в шапке чата и авто-повтор при обрыве стрима.
+- 🌿 Ветки сообщений, снимки изменений файлов с откатом в одно касание, боковая панель чатов, таблицы, блоки заметок и LaTeX.
+- 🎛️ Три режима работы (**Простой**, **Код**, **Всё сразу**), поиск по настройкам, 8 языков интерфейса и оверлей ассистента с шейдером подсветки краёв и прикреплением файлов.
 - ✈️ Telegram через user API: чаты, поиск, отправка сообщений и файлов, скрипты на Telethon.
-- 🎬 Видео и звук по ссылке: YouTube, TikTok, Instagram, X, VK и другие, сразу в Загрузки.
-- 🛠️ Навыки: агент сам пишет, сохраняет и чинит недостающую логику на Python.
-- ⚡ Автоматизации: задачи по расписанию и слежение за новыми сообщениями в Telegram и уведомлениями приложений, результат приходит уведомлением. Длинные задачи агент отдаёт фоновым помощникам.
+- 🎬 Видео и звук по ссылке: YouTube, TikTok, Instagram, X, VK и другие, сразу в `Downloads/MW Agent+`.
+- 🛠️ Навыки: агент сам пишет, сохраняет, экспортирует и чинит недостающую логику на Python.
+- ⚡ Автоматизации: задачи по расписанию и слежение за новыми сообщениями в Telegram и уведомлениями приложений, фоновые помощники для долгих задач.
 - 🔎 Контакты, журнал звонков, поиск фото в галерее и поиск по смыслу в твоих файлах и чатах.
-- 📲 Плитка в шторке и виджет: новый чат или вопрос голосом в одно касание.
+- 📲 4 плитки в шторке и виджет на главный экран, живые уведомления о ходе работы, защита приватных инструментов разблокировкой экрана.
 - 🔦 Курсы валют, фонарик, громкость, буфер обмена, QR-коды, календарь, звонки, SMS, письма, маршруты и «Поделиться».
 - 🔒 Без сервера, аккаунта и аналитики. Ключи и сессия Telegram зашифрованы, опасные действия спрашивают разрешение.
 
