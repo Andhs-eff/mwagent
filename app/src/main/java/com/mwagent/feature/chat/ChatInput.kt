@@ -63,6 +63,8 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextOverflow
@@ -107,6 +109,8 @@ fun ChatInput(
     steerable: Boolean = false,
 ) {
     val haptics = rememberHaptics()
+    val keyboard = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
     val dictationState = dictation?.state ?: DictationState.Idle
     val isDictating = dictationState != DictationState.Idle
     val steering = steerable && isStreaming && canSend && !isDictating
@@ -155,6 +159,8 @@ fun ChatInput(
                     ComposerAction.SEND -> {
                         sentText = text.ifBlank { null }
                         onSend()
+                        keyboard?.hide()
+                        focusManager.clearFocus()
                     }
                     ComposerAction.DICTATE -> dictation?.onStart?.invoke()
                     ComposerAction.FINISH_DICTATION -> dictation?.onFinish?.invoke()
